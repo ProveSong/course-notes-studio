@@ -1,0 +1,8 @@
+# Install CUDA PyTorch and Paddle separately with setup-gpu.ps1.
+paddleocr==3.7.0
+paddlex[ocr]==3.7.2
+transformers==4.51.3
+safetensors>=0.5,<1
+ftfy>=6,<7
+numpy>=1.26,<3
+requests>=2.31,<3

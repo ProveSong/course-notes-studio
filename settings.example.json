@@ -1,0 +1,10 @@
+{
+  "compact_notes": true,
+  "llm_transport": "codex_cli",
+  "formula_backend": "paddle",
+  "llm_max_output_tokens": 10000,
+  "llm_workers": 1,
+  "ocr_mode": "printed",
+  "whisper_model": "large-v2",
+  "device": "cuda"
+}
