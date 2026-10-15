@@ -6,7 +6,7 @@ Windows 桌面 GUI 提供批量视频队列、总进度、阶段进度、取消�
 
 ## 快速开始
 
-1. 从本项目 **Releases** 下载 `CourseNotesStudio-0.2.0-windows-x64.zip`，解压到普通文件夹，双击 `CourseNotesStudio.exe`。GUI 已包含 Python 运行时。
+1. 从本项目 **Releases** 下载 `CourseNotesStudio-0.2.1-windows-x64.zip`，解压到普通文件夹，双击 `CourseNotesStudio.exe`。GUI 已包含 Python 运行时。
 2. 首次使用 GPU OCR：安装 **Python 3.11 x64** 和支持 CUDA 12.6 的 NVIDIA 驱动，然后运行 `setup-gpu.cmd`。该步骤需要联网、数 GB 下载和可用磁盘空间；出现安装错误时终止并显示原因。OCR 推断本身离线运行，禁止 CPU 降级。
 3. 安装 [VideoCaptioner](https://github.com/WEIFENG2333/VideoCaptioner)，在其中下载本地 Faster-Whisper `large-v2` 模型。本程序调用其本机 FFmpeg 和 Faster-Whisper-XXL，不上传音频。
 4. 使用 DeepSeek 时，在“首次配置 / 环境检查”填写 API Key，接口选 `messages`，模型选 `deepseek-flash`，然后在主窗口选择 **DeepSeek API**。也可在 [CC Switch](https://github.com/farion1231/cc-switch) 中配置其他 LLM，选择数据库、供应商、模型与 `api` / `codex_cli`。使用 CLI 时需安装 [Codex CLI](https://github.com/openai/codex)。LLM 服务费用由所选供应商决定。

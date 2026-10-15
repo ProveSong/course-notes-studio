@@ -64,6 +64,10 @@ def command_for(binary,workspace,schema,response,thread_id='',persistent=False):
     return command
 
 
+def usage_delta(current,previous):
+    return {key:max(0,value-previous.get(key,0)) if isinstance(value,(int,float)) else value for key,value in current.items()}
+
+
 def call_cli(settings,prompt,images=(),cancel=None):
     p=selected_provider(settings)
     if p.app!='codex' or p.wire_api!='responses': raise ValueError('Codex CLI 方式需要选择 CC Switch 的 Codex Responses 配置。')
@@ -140,6 +144,13 @@ unbounded_connection_retries = false
         validate_events(event_text)
         from .usage import record_usage
         usage=next((e.get('usage',{}) for e in reversed(events) if e.get('type')=='turn.completed'),{})
+        if settings.conversation_file:
+            # exec resume reports cumulative thread counters, not this turn's usage.
+            usage_path=task/'usage-total.json'
+            previous=json.loads(usage_path.read_text('utf-8')) if usage_path.exists() and started_thread==thread_id else {}
+            total=usage
+            usage=usage_delta(total,previous)
+            usage_path.write_text(json.dumps(total),'utf-8')
         record_usage('codex_cli',p.model,prompt,images,usage)
         if not response.exists(): raise RuntimeError('Codex CLI 没有输出最终讲义。')
         text=response.read_text('utf-8')
