@@ -45,12 +45,40 @@ class PipelineTests(unittest.TestCase):
         def executor(**kwargs):
             pool=ThreadPoolExecutor(**kwargs);executors.append(pool);return pool
         cancel=threading.Event()
-        with patch('course_notes.pipeline.generate',return_value='{}'),patch('course_notes.pipeline.ThreadPoolExecutor',side_effect=executor):
+        with patch('course_notes.pipeline.generate',return_value='{}'),patch('course_notes.pipeline.repair_handout',return_value='{}'),patch('course_notes.pipeline.ThreadPoolExecutor',side_effect=executor),patch('time.sleep'):
             with self.assertRaisesRegex(ValueError,'正文为空'):
                 run(self.video,self.output,self.settings,cancel=cancel)
         self.assertTrue(cancel.is_set())
         self.assertTrue(executors[0]._shutdown)
         executors[0].shutdown(wait=True,cancel_futures=True)
+
+    def test_malformed_json_repairs_without_resending_evidence(self):
+        response=json.dumps({'markdown':'课堂解释','image_requests':[]})
+        with patch('course_notes.pipeline.generate',return_value='{"markdown":"bad\\q"}'),patch('course_notes.pipeline.repair_handout',return_value=response) as repair,patch('time.sleep'):
+            run(self.video,self.output,self.settings)
+        self.assertEqual(repair.call_count,2)
+        self.assertEqual(len(list((self.job/'chunks').glob('*.invalid-*.txt'))),2)
+
+    def test_invalid_raw_cache_is_repaired_instead_of_replayed(self):
+        response=json.dumps({'markdown':'课堂解释','image_requests':[]})
+        with patch('course_notes.pipeline.generate',return_value=response):run(self.video,self.output,self.settings)
+        (self.job/'chunks/C0001.result.json').unlink()
+        (self.job/'chunks/C0001.response.txt').write_text('{"markdown":"bad\\q"}','utf-8')
+        with patch('course_notes.pipeline.generate') as generate,patch('course_notes.pipeline.repair_handout',return_value=response) as repair:
+            run(self.video,self.output,self.settings)
+        generate.assert_not_called();repair.assert_called_once()
+
+    def test_explicit_resume_keeps_completed_editorial_and_provenance(self):
+        response=json.dumps({'markdown':'课堂解释','image_requests':[]})
+        with patch('course_notes.pipeline.generate',return_value=response):run(self.video,self.output,self.settings)
+        path=self.job/'chunks/C0001.result.json';cache=json.loads(path.read_text('utf-8'))
+        cache['fingerprint']='old-prompt';cache['result']['markdown']='已经核对修正的讲义'
+        path.write_text(json.dumps(cache),'utf-8')
+        with patch('course_notes.pipeline.generate') as generate:
+            target=run(self.video,self.output,self.settings,resume_completed=True)
+        generate.assert_not_called()
+        self.assertIn('已经核对修正的讲义',target.read_text('utf-8'))
+        self.assertEqual(json.loads(path.read_text('utf-8'))['fingerprint'],'old-prompt')
 
     def test_auto_images_reviews_requested_frames_and_off_drops_policy(self):
         response=json.dumps({'markdown':'课程解释','image_requests':[{'visual_id':'V000001','reason':'核对公式'}]})

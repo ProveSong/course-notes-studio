@@ -116,6 +116,22 @@ def parse_json(text):
     return result
 
 
+def validate_handout(text):
+    result=parse_json(text)
+    markdown=result.get('markdown')
+    if not isinstance(markdown,str) or not markdown.strip():raise ValueError('讲义正文为空。')
+    if any(ord(c)<32 and c not in '\n\r\t' for c in markdown):raise ValueError('讲义含错误转义的控制字符。')
+    if '\n' not in markdown and markdown.count(r'\n')>=2:raise ValueError('讲义换行被重复转义。')
+    if not isinstance(result.get('image_requests',[]),list):raise ValueError('截图请求格式错误。')
+    return result
+
+
+def repair_handout(settings,raw,cancel=None):
+    return call(settings,'修复下面课程讲义的 JSON 编码。只返回一个合法 JSON 对象，不加代码围栏。'
+        '保留原文内容和 image_requests，不增删教学内容。markdown 解码后必须有真正的换行；'
+        'LaTeX 的反斜杠在 JSON 字符串中须正确转义，避免控制字符和重复转义。原响应：\n'+raw,cancel=cancel)
+
+
 def prompt(evidence, previous='', compact=False):
     if compact:
         from .compact import pack, dumps

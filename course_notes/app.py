@@ -9,7 +9,7 @@ from .pipeline import run_safe
 
 class App(tk.Tk):
     def __init__(self,enable_control=True):
-        super().__init__(); self.title('Course Notes Studio 0.2.3 · 课程回放讲义整理器'); self.geometry('1000x780'); self.cancel=threading.Event()
+        super().__init__(); self.title('Course Notes Studio 0.2.4 · 课程回放讲义整理器'); self.geometry('1000x780'); self.cancel=threading.Event()
         self.video=tk.StringVar(); self.output=tk.StringVar(value=Settings.load().output_root); self.status=tk.StringVar(value='选择课程视频后开始')
         self._row('课程视频',self.video,True); self._row('输出目录',self.output,False)
         self.settings=Settings.load()

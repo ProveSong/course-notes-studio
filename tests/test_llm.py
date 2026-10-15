@@ -2,10 +2,18 @@ import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
-from course_notes.llm import call
+from course_notes.llm import call,validate_handout
 
 
 class StreamTests(unittest.TestCase):
+    def test_bad_latex_and_double_escaped_newlines_are_rejected(self):
+        for text in ['{"markdown":"bad\\q"}',json.dumps({'markdown':r'## Title\n\nBody'}),json.dumps({'markdown':'bad\f rac'})]:
+            with self.assertRaises(ValueError):validate_handout(text)
+
+    def test_normal_latex_and_newlines_remain_unchanged(self):
+        markdown='## 公式\n\n'+r'$\frac{a}{b}$'
+        self.assertEqual(validate_handout(json.dumps({'markdown':markdown}))['markdown'],markdown)
+
     def request(self,events):
         response=SimpleNamespace(status_code=200,text='\n'.join('data: '+json.dumps(e,ensure_ascii=False) for e in events))
         response.json=lambda: (_ for _ in ()).throw(ValueError())

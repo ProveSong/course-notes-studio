@@ -8,7 +8,7 @@ from .config import Settings
 from .asr import transcribe
 from .visuals import extract, _time
 from .ocr import annotate
-from .llm import generate, parse_json, prompt
+from .llm import generate, parse_json, prompt, validate_handout, repair_handout
 from .process import check_cancel
 from .review import register, destination
 
@@ -85,7 +85,7 @@ def assemble(job, target):
     return target
 
 
-def run(video: Path, output: Path, settings=None, notify=lambda a,b:None, cancel=None, auto_approve_images=False):
+def run(video: Path, output: Path, settings=None, notify=lambda a,b:None, cancel=None, auto_approve_images=False, resume_completed=False):
     settings=settings or Settings.load(); cancel=cancel or threading.Event(); video=video.resolve(); output=output.resolve()
     if not video.is_file(): raise FileNotFoundError(video)
     if settings.chunk_seconds<=0 or settings.sample_seconds<=0: raise ValueError('片段/采样间隔必须大于零。')
@@ -157,15 +157,27 @@ def run(video: Path, output: Path, settings=None, notify=lambda a,b:None, cancel
         path=chunks/f'{name}.result.json'
         if path.exists():
             cache=json.loads(path.read_text('utf-8'))
-            if cache.get('fingerprint')==fingerprint: return fingerprint,None,cache['result']
+            if cache.get('fingerprint')==fingerprint or (resume_completed and cache.get('destination')==destination(settings) and cache.get('transport')==settings.llm_transport):
+                return cache['fingerprint'],None,cache['result']
         raw_path=chunks/f'{name}.response.txt'; fingerprint_path=chunks/f'{name}.response-fingerprint.txt'
+        raw=None
         if raw_path.exists() and fingerprint_path.exists() and fingerprint_path.read_text('utf-8')==fingerprint:
-            return fingerprint,raw_path.read_text('utf-8'),None
+            raw=raw_path.read_text('utf-8')
+            try:
+                validate_handout(raw)
+                return fingerprint,raw,None
+            except ValueError:pass
         import time
         for attempt in range(3):
             check_cancel(cancel)
             try:
-                raw=generate(current,settings,context,notify,cancel); break
+                if raw is not None:
+                    import uuid
+                    (chunks/f'{name}.invalid-{uuid.uuid4().hex[:8]}.txt').write_text(raw,'utf-8')
+                    raw=repair_handout(settings,raw,cancel)
+                else:raw=generate(current,settings,context,notify,cancel)
+                validate_handout(raw)
+                break
             except Exception as error:
                 (chunks/f'{name}.error.txt').write_text(str(error),'utf-8')
                 if attempt==2: raise
@@ -231,7 +243,7 @@ def run(video: Path, output: Path, settings=None, notify=lambda a,b:None, cancel
     return target
 
 
-def run_safe(video, output, settings, notify, cancel, auto_approve_images=False):
-    try: return run(Path(video),Path(output),settings,notify,cancel,auto_approve_images)
+def run_safe(video, output, settings, notify, cancel, auto_approve_images=False, resume_completed=False):
+    try: return run(Path(video),Path(output),settings,notify,cancel,auto_approve_images,resume_completed)
     except Exception:
         Path(output).mkdir(parents=True,exist_ok=True); (Path(output)/'error.log').write_text(traceback.format_exc(),'utf-8'); raise
