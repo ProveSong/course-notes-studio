@@ -62,4 +62,16 @@ class ReviewTests(unittest.TestCase):
                 process_approved(self.job,self.s,lambda a,b:None,threading.Event())
             call.assert_not_called()
 
+    @patch('course_notes.review.destination',return_value={'provider':'fixture','base_url':'https://example.test','model':'test'})
+    def test_explicit_auto_option_supports_api_and_future_requests(self,destination):
+        self.task_fixture();self.s.llm_transport='api'
+        with self.assertRaises(ValueError):grant_task_consent(self.job,self.s)
+        grant_task_consent(self.job,self.s,automatic=True)
+        register(self.job,'C0002',[{'visual_id':'V000002'}],[{'id':'V000002','time':10,'image':'visuals/a.jpg'}])
+        apply_task_consent(self.job,self.s)
+        records=json.loads((self.job/'review-requests.json').read_text('utf-8'))
+        self.assertEqual([r['status'] for r in records],['approved','approved'])
+        self.assertTrue(all(r['approved_transport']=='api' for r in records))
+        self.assertTrue(all(r['approval_source']=='user-auto-checkbox' for r in records))
+
 if __name__=='__main__': unittest.main()

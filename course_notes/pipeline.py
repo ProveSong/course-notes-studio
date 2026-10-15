@@ -85,7 +85,7 @@ def assemble(job, target):
     return target
 
 
-def run(video: Path, output: Path, settings=None, notify=lambda a,b:None, cancel=None):
+def run(video: Path, output: Path, settings=None, notify=lambda a,b:None, cancel=None, auto_approve_images=False):
     settings=settings or Settings.load(); cancel=cancel or threading.Event(); video=video.resolve(); output=output.resolve()
     if not video.is_file(): raise FileNotFoundError(video)
     if settings.chunk_seconds<=0 or settings.sample_seconds<=0: raise ValueError('片段/采样间隔必须大于零。')
@@ -100,6 +100,8 @@ def run(video: Path, output: Path, settings=None, notify=lambda a,b:None, cancel
         if old['signature']!=signature: raise ValueError('输入或识别参数已变化，请使用新的输出目录，避免复用旧证据。')
         if old.get('chunk_seconds',settings.chunk_seconds)!=settings.chunk_seconds:
             raise ValueError('分段时长已变化，请使用新的输出目录，避免混合不同时间范围的讲义。')
+    from dataclasses import replace
+    settings=replace(settings,conversation_file=str(job/'deepseek-conversation.json'))
     cap=cv2.VideoCapture(str(video)); fps=cap.get(cv2.CAP_PROP_FPS); duration=cap.get(cv2.CAP_PROP_FRAME_COUNT)/fps; cap.release()
     target=output/(video.stem+('—课程讲解.md' if settings.compact_notes else '.md'))
     save_json(manifest_path,{'signature':signature,'title':video.stem,'duration':duration,'target':str(target),'destination':destination(settings),'chunk_seconds':settings.chunk_seconds,'notes_style':'teaching' if settings.compact_notes else 'evidence'})
@@ -116,6 +118,13 @@ def run(video: Path, output: Path, settings=None, notify=lambda a,b:None, cancel
         cached=annotate_formulas(cached,job,settings,notify,cancel)
     visual=[{**v,'id':f'V{i:06d}'} for i,v in enumerate(cached,1)]; save_json(ocr_path,visual)
     evidence={'speech':speech,'visuals':visual}; save_json(job/'evidence.json',evidence)
+    if auto_approve_images:
+        from .review import grant_task_consent
+        from .config import visual_settings
+        grant_task_consent(job,visual_settings(settings),automatic=True)
+    elif (job/'review-policy.json').exists():
+        policy=json.loads((job/'review-policy.json').read_text('utf-8'))
+        if policy.get('automatic'):(job/'review-policy.json').unlink()
     gaps=[]; end=0
     for s in speech:
         if s['start']-end>2: gaps.append({'start':end,'end':s['start'],'status':'ASR未检出，需人工核对'})
@@ -127,7 +136,7 @@ def run(video: Path, output: Path, settings=None, notify=lambda a,b:None, cancel
     report=[]
     # Each chunk receives neighboring raw speech as context. This makes requests
     # independent and permits a small bounded pool without dropping prior facts.
-    pool=ThreadPoolExecutor(max_workers=settings.llm_workers)
+    pool=ThreadPoolExecutor(max_workers=1)
     futures={}
     def context_for(start):
         return '\n'.join(f'[{_time(s["start"])}] {s["text"]}' for s in speech if start-600<=s['start']<start)[-6000:]
@@ -213,11 +222,16 @@ def run(video: Path, output: Path, settings=None, notify=lambda a,b:None, cancel
     finally:
         if not succeeded: cancel.set()
         pool.shutdown(wait=succeeded,cancel_futures=True)
+    if auto_approve_images:
+        from .config import visual_settings
+        from .review import process_approved
+        process_approved(job,visual_settings(settings),notify,cancel)
+        assemble(job,target)
     notify('完成',f'讲义已保存；检查 review-requests.json 中的截图复核申请：{job}')
     return target
 
 
-def run_safe(video, output, settings, notify, cancel):
-    try: return run(Path(video),Path(output),settings,notify,cancel)
+def run_safe(video, output, settings, notify, cancel, auto_approve_images=False):
+    try: return run(Path(video),Path(output),settings,notify,cancel,auto_approve_images)
     except Exception:
         Path(output).mkdir(parents=True,exist_ok=True); (Path(output)/'error.log').write_text(traceback.format_exc(),'utf-8'); raise

@@ -25,13 +25,13 @@ def resolve_image(job, relative):
     return path
 
 
-def grant_task_consent(job,settings):
+def grant_task_consent(job,settings,automatic=False):
     """Called only after the user approves this video's requested frames."""
-    if settings.llm_transport!='codex_cli': raise ValueError('任务范围授权仅用于 Codex CLI。')
+    if settings.llm_transport!='codex_cli' and not automatic: raise ValueError('任务范围授权仅用于 Codex CLI，API 需显式勾选自动批准。')
     manifest=json.loads((job/'manifest.json').read_text('utf-8'))
     visuals=json.loads((job/'visuals.json').read_text('utf-8'))
     policy={'scope':'requested-existing-video-frames','signature':manifest['signature'],
-            'destination':destination(settings),'transport':'codex_cli',
+            'destination':destination(settings),'transport':settings.llm_transport,'automatic':automatic,
             'images':{v['image']:digest(resolve_image(job,v['image'])) for v in visuals}}
     path=job/'review-policy.json';temporary=path.with_name(path.name+'.'+uuid.uuid4().hex+'.tmp')
     temporary.write_text(json.dumps(policy,ensure_ascii=False,indent=2),'utf-8');os.replace(temporary,path)
@@ -48,7 +48,7 @@ def apply_task_consent(job,settings):
             if record['status']!='pending': continue
             original=policy['images'].get(record['image'])
             if original!=record['sha256'] or digest(resolve_image(job,record['image']))!=original: continue
-            record.update(status='approved',destination=policy['destination'],approved_transport='codex_cli',approval_source='user-task-consent')
+            record.update(status='approved',destination=policy['destination'],approved_transport=policy['transport'],approval_source='user-auto-checkbox' if policy.get('automatic') else 'user-task-consent')
 
 
 def register(job, chunk_id, requests, visuals):
@@ -76,6 +76,8 @@ def decide(job, ids, settings, approve=True):
 
 
 def process_approved(job, settings, notify, cancel, only_ids=None):
+    from dataclasses import replace
+    settings=replace(settings,conversation_file=str(job/'deepseek-conversation.json'))
     apply_task_consent(job,settings)
     path=job/'review-requests.json'
     if not path.exists(): return

@@ -1,6 +1,7 @@
 """Isolated, non-interactive Codex CLI transport with no filesystem tools."""
 from __future__ import annotations
 import json,os,shutil,subprocess,tempfile,time,uuid
+from contextlib import contextmanager
 from pathlib import Path
 from .config import ROOT,selected_provider
 from .process import check_cancel
@@ -43,12 +44,32 @@ def validate_events(text):
         raise RuntimeError('Codex CLI 未完整结束，不能作为成功结果。')
 
 
+@contextmanager
+def task_directory(settings,provider,cancel):
+    if not settings.conversation_file:
+        with tempfile.TemporaryDirectory(prefix='course-notes-cli-') as directory:yield Path(directory)
+        return
+    from .conversation import conversation
+    with conversation(settings,provider,cancel) as session:
+        directory=Path(settings.conversation_file).parent/'.codex-conversations'/session.key
+        directory.mkdir(parents=True,exist_ok=True)
+        yield directory
+
+
+def command_for(binary,workspace,schema,response,thread_id='',persistent=False):
+    command=[binary,'-C',str(workspace),'exec']
+    if thread_id:command+=['resume',thread_id]
+    command+=['--skip-git-repo-check','--json','--output-schema',str(schema),'-o',str(response)]
+    if not persistent:command.append('--ephemeral')
+    return command
+
+
 def call_cli(settings,prompt,images=(),cancel=None):
     p=selected_provider(settings)
     if p.app!='codex' or p.wire_api!='responses': raise ValueError('Codex CLI 方式需要选择 CC Switch 的 Codex Responses 配置。')
     binary=executable(settings);check_cancel(cancel) if cancel else None
-    with tempfile.TemporaryDirectory(prefix='course-notes-cli-') as task_directory:
-        task=Path(task_directory);cli_home=task/'cli-home';cli_home.mkdir();workspace=task/'task';workspace.mkdir()
+    with task_directory(settings,p,cancel) as task:
+        cli_home=task/'cli-home';cli_home.mkdir(exist_ok=True);workspace=task/'task';workspace.mkdir(exist_ok=True)
         config=f'''model = {json.dumps(p.model)}
 model_provider = "course"
 model_reasoning_effort = "low"
@@ -84,15 +105,18 @@ unbounded_connection_retries = false
         (cli_home/'config.toml').write_text(config,'utf-8')
         schema=workspace/'schema.json';schema.write_text(json.dumps(IMAGE_SCHEMA if images else TEXT_SCHEMA),'utf-8')
         response=workspace/'response.json';trace=workspace/'events.jsonl';errors=workspace/'stderr.log'
-        # Only the child process uses the temporary CLI configuration. No
+        response.unlink(missing_ok=True)
+        # Only the child process uses this isolated CLI configuration. No
         # user configuration or CC Switch credentials are written or modified.
         env={k:v for k,v in os.environ.items() if not k.startswith('CODEX_')}
         env['CODEX_HOME']=str(cli_home);env['COURSE_NOTES_CODEX_KEY']=p.key
-        command=[binary,'exec','--skip-git-repo-check','--ephemeral','--json','--color','never','--output-schema',str(schema),'-o',str(response),'-C',str(workspace)]
+        thread_path=task/'thread-id.txt'
+        thread_id=thread_path.read_text('utf-8').strip() if thread_path.exists() else ''
+        command=command_for(binary,workspace,schema,response,thread_id,bool(settings.conversation_file))
         for path in images: command.extend(['--image',str(Path(path).resolve())])
         command.append('-');started=time.monotonic()
         with trace.open('wb') as stdout,errors.open('wb') as stderr:
-            process=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=stdout,stderr=stderr,env=env,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+            process=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=stdout,stderr=stderr,env=env,cwd=workspace,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
             try:
                 process.stdin.write(prompt.encode('utf-8'));process.stdin.close()
                 while process.poll() is None:
@@ -109,10 +133,12 @@ unbounded_connection_retries = false
         logs=ROOT/'cli-logs';logs.mkdir(exist_ok=True);identity=uuid.uuid4().hex
         (logs/f'{identity}.jsonl').write_text(event_text,'utf-8')
         (logs/f'{identity}.stderr.log').write_text(error_text,'utf-8')
+        events=[json.loads(line) for line in event_text.splitlines() if line.strip()]
+        started_thread=next((e.get('thread_id') for e in events if e.get('type')=='thread.started'),None)
+        if settings.conversation_file and started_thread:thread_path.write_text(started_thread,'utf-8')
         if process.returncode: raise RuntimeError(f'Codex CLI 退出码 {process.returncode}：'+error_text[-1200:])
         validate_events(event_text)
         from .usage import record_usage
-        events=[json.loads(line) for line in event_text.splitlines() if line.strip()]
         usage=next((e.get('usage',{}) for e in reversed(events) if e.get('type')=='turn.completed'),{})
         record_usage('codex_cli',p.model,prompt,images,usage)
         if not response.exists(): raise RuntimeError('Codex CLI 没有输出最终讲义。')

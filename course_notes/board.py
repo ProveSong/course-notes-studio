@@ -48,6 +48,8 @@ def enrich(job,settings,identity,cancel,notify=lambda a,b:None):
 
 
 def process(job,settings,notify,cancel):
+    from dataclasses import replace
+    settings=replace(settings,conversation_file=str(job/'deepseek-conversation.json'))
     apply_task_consent(job,settings)
     records=json.loads((Path(job)/'review-requests.json').read_text('utf-8'))
     for record in records:

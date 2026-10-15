@@ -6,5 +6,11 @@
   "llm_workers": 1,
   "ocr_mode": "printed",
   "whisper_model": "large-v2",
-  "device": "cuda"
+  "device": "cuda",
+  "deepseek_base_url": "https://api.deepseek.com",
+  "deepseek_model": "deepseek-flash",
+  "deepseek_protocol": "messages",
+  "vision_provider": "",
+  "vision_model": "",
+  "vision_transport": "api"
 }

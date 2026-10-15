@@ -15,24 +15,55 @@ def endpoint(base, resource):
 
 
 def call(settings, prompt, images=(), cancel=None):
+    if settings and settings.conversation_file and (settings.llm_transport=='api' or settings.provider=='deepseek:direct'):
+        from .conversation import conversation
+        p=selected_provider(settings)
+        with conversation(settings,p,cancel) as session:
+            result=_call(settings,prompt,images,cancel,session.messages)
+            if p.wire_api=='deepseek_messages':
+                from .deepseek_messages import user_message
+                message=user_message(p,prompt,images)
+            elif p.wire_api in ('responses','anthropic'):
+                if p.wire_api=='responses':
+                    content=[{'type':'input_text','text':prompt}]
+                    for path in images:content.append({'type':'input_image','image_url':'data:image/jpeg;base64,'+base64.b64encode(Path(path).read_bytes()).decode('ascii')})
+                else:
+                    content=[{'type':'text','text':prompt}]
+                    for path in images:content.append({'type':'image','source':{'type':'base64','media_type':'image/jpeg','data':base64.b64encode(Path(path).read_bytes()).decode('ascii')}})
+                message={'role':'user','content':content}
+            else:message={'role':'user','content':prompt}
+            session.commit(message,result)
+            return result
+    return _call(settings,prompt,images,cancel)
+
+
+def _call(settings, prompt, images=(), cancel=None, history=()):
     """Images must be resolved by the approval gate, never by the model itself."""
-    if settings and settings.llm_transport=='codex_cli':
+    if settings and settings.llm_transport=='codex_cli' and settings.provider!='deepseek:direct':
         from .codex_cli import call_cli
         return call_cli(settings,prompt,images,cancel)
     p = selected_provider(settings)
-    if p.wire_api == 'responses':
+    if p.wire_api=='deepseek_messages':
+        from .deepseek_messages import call_messages
+        return call_messages(settings,p,prompt,images,cancel,history)
+    if p.wire_api=='chat_completions':
+        if images:raise ValueError('DeepSeek 文字 API 不支持截图；请使用单独配置的视觉模型。')
+        body={'model':p.model,'messages':[*history,{'role':'user','content':prompt}],
+              'response_format':{'type':'json_object'},'max_tokens':min(getattr(settings,'llm_max_output_tokens',8192),8192),'stream':False}
+        response=requests.post(endpoint(p.base_url,'chat/completions'),headers={'Authorization':'Bearer '+p.key},json=body,timeout=(30,1200))
+    elif p.wire_api == 'responses':
         content = [{'type': 'input_text', 'text': prompt}]
         for path in images:
             data = base64.b64encode(Path(path).read_bytes()).decode('ascii')
             content.append({'type':'input_image', 'image_url':'data:image/jpeg;base64,'+data})
-        body = {'model':p.model, 'input':[{'role':'user','content':content}], 'max_output_tokens':getattr(settings,'llm_max_output_tokens',10000),'stream':True}
+        body = {'model':p.model, 'input':[*history,{'role':'user','content':content}], 'max_output_tokens':getattr(settings,'llm_max_output_tokens',10000),'stream':True}
         if p.model.startswith(('gpt-5','gpt-6','o3','o4')): body['reasoning']={'effort':'low'}
         response = requests.post(endpoint(p.base_url,'responses'), headers={'Authorization':'Bearer '+p.key}, json=body, timeout=(30,1200))
     elif p.wire_api == 'anthropic':
         content = [{'type':'text','text':prompt}]
         for path in images:
             content.append({'type':'image','source':{'type':'base64','media_type':'image/jpeg','data':base64.b64encode(Path(path).read_bytes()).decode('ascii')}})
-        body = {'model':p.model,'max_tokens':getattr(settings,'llm_max_output_tokens',10000),'messages':[{'role':'user','content':content}]}
+        body = {'model':p.model,'max_tokens':getattr(settings,'llm_max_output_tokens',10000),'messages':[*history,{'role':'user','content':content}]}
         response = requests.post(endpoint(p.base_url,'messages'),headers={'x-api-key':p.key,'anthropic-version':'2023-06-01'},json=body,timeout=(30,900))
     else:
         raise ValueError('不支持的 LLM 接口：'+p.wire_api)
@@ -42,7 +73,7 @@ def call(settings, prompt, images=(), cancel=None):
         detail=response.text[:1200]
         if '<html' in detail.lower() or '<!doctype' in detail.lower():
             detail='服务网关请求失败，请检查供应商状态后重试。'
-        raise RuntimeError(f'LLM HTTP {response.status_code}: {detail}')
+        raise RuntimeError(f'LLM HTTP {response.status_code}: {detail.replace(p.key,"[REDACTED]")}')
     try:
         data = response.json()
     except ValueError:
@@ -60,7 +91,11 @@ def call(settings, prompt, images=(), cancel=None):
         data=complete
     if data.get('status') in ('incomplete','failed','cancelled'):
         raise RuntimeError('LLM 响应未完整结束：'+str(data.get('status')))
-    if p.wire_api=='anthropic':
+    if p.wire_api=='chat_completions':
+        choices=data.get('choices',[])
+        if not choices or choices[0].get('finish_reason')!='stop':raise RuntimeError('DeepSeek 输出未完整结束，请减小片段时长或调整输出预算。')
+        text=choices[0].get('message',{}).get('content','') or ''
+    elif p.wire_api=='anthropic':
         if data.get('stop_reason')=='max_tokens': raise RuntimeError('LLM 输出被截断，请减小片段时长。')
         text='\n'.join(x.get('text','') for x in data.get('content',[]) if x.get('type')=='text')
     else:

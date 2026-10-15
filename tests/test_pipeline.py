@@ -52,6 +52,18 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(executors[0]._shutdown)
         executors[0].shutdown(wait=True,cancel_futures=True)
 
+    def test_auto_images_reviews_requested_frames_and_off_drops_policy(self):
+        response=json.dumps({'markdown':'课程解释','image_requests':[{'visual_id':'V000001','reason':'核对公式'}]})
+        dest={'provider':'test','base_url':'https://example.test','model':'test'}
+        with patch('course_notes.pipeline.generate',return_value=response),patch('course_notes.review.destination',return_value=dest),patch('course_notes.review.call',return_value='{"markdown":"确认公式"}') as review:
+            run(self.video,self.output,self.settings,auto_approve_images=True)
+            self.assertEqual(review.call_count,1)
+            records=json.loads((self.job/'review-requests.json').read_text('utf-8'))
+            self.assertEqual(records[0]['status'],'reviewed')
+            self.assertEqual(records[0]['approval_source'],'user-auto-checkbox')
+            run(self.video,self.output,self.settings,auto_approve_images=False)
+            self.assertFalse((self.job/'review-policy.json').exists())
+
     def test_compact_output_does_not_append_raw_evidence_and_keeps_sources(self):
         self.settings.compact_notes=True
         response=json.dumps({'markdown':'连续的课程解释','covered_speech_ids':[],'covered_visual_ids':[],'image_requests':[]})

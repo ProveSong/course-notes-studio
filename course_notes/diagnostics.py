@@ -10,6 +10,9 @@ def checks(settings):
            ('文字检测模型',Path.home()/'.paddlex/official_models/PP-OCRv5_server_det/inference.pdiparams'),
            ('文字识别模型',Path.home()/'.paddlex/official_models/PP-OCRv5_server_rec/inference.pdiparams')]
     rows=[(label,path.is_file(),str(path)) for label,path in files]
+    from .secrets import deepseek_key
+    try:rows.append(('DeepSeek API Key',bool(deepseek_key()),'已配置' if deepseek_key() else '未配置；可使用 CC Switch 供应商'))
+    except Exception as error:rows.append(('DeepSeek API Key',False,str(error)))
     try:items=providers(settings.cc_database);rows.append(('CC Switch',bool(items),f'{len(items)} 个可用配置'))
-    except Exception as error:rows.append(('CC Switch',False,str(error)))
+    except Exception:rows.append(('CC Switch',False,'未配置；DeepSeek API 可独立使用'))
     return rows

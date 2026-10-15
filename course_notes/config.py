@@ -22,6 +22,13 @@ class Settings:
     cc_database: str = str(Path.home() / '.cc-switch/cc-switch.db')
     provider: str = ''
     model: str = ''
+    deepseek_base_url: str = 'https://api.deepseek.com'
+    deepseek_model: str = 'deepseek-flash'
+    deepseek_protocol: str = 'messages'
+    vision_provider: str = ''
+    vision_model: str = ''
+    vision_transport: str = 'api'
+    conversation_file: str = ''
     language: str = 'zh'
     whisper_model: str = 'large-v2'
     device: str = 'cuda'
@@ -58,7 +65,8 @@ class Settings:
         return result
 
     def save(self):
-        (ROOT / 'settings.json').write_text(json.dumps(asdict(self), ensure_ascii=False, indent=2), 'utf-8')
+        data=asdict(self);data.pop('conversation_file',None)
+        (ROOT / 'settings.json').write_text(json.dumps(data, ensure_ascii=False, indent=2), 'utf-8')
 
 
 @dataclass
@@ -111,7 +119,38 @@ def providers(database: str) -> list[Provider]:
     return result
 
 
+def available_providers(settings):
+    try:items=providers(settings.cc_database)
+    except (OSError,ValueError,sqlite3.Error):items=[]
+    return items+[Provider('deepseek:direct','DeepSeek API','deepseek',settings.deepseek_base_url,'',settings.deepseek_model,'chat_completions',False)]
+
+
+def visual_settings(settings):
+    from dataclasses import replace
+    if settings.provider!='deepseek:direct':return settings
+    if not settings.vision_provider or settings.vision_provider=='deepseek:direct':
+        model=settings.vision_model or settings.model or settings.deepseek_model
+        if settings.deepseek_protocol=='messages' and model=='deepseek-flash':
+            return replace(settings,model=model,llm_transport='api')
+        raise ValueError('DeepSeek 截图复核请选择 Messages 接口和 deepseek-flash，或另选视觉模型。')
+    return replace(settings,provider=settings.vision_provider,model=settings.vision_model,llm_transport=settings.vision_transport)
+
+
 def selected_provider(settings: Settings):
+    if settings.provider=='deepseek:direct':
+        from .secrets import deepseek_key
+        from urllib.parse import urlsplit
+        key=deepseek_key()
+        if not key:raise ValueError('请在首次配置中填写 DeepSeek API Key，或设置 DEEPSEEK_API_KEY。')
+        url=settings.deepseek_base_url.rstrip('/')
+        if urlsplit(url).scheme!='https' or not urlsplit(url).netloc:raise ValueError('DeepSeek API 地址必须是有效 HTTPS 地址。')
+        if urlsplit(url).username or urlsplit(url).password or urlsplit(url).query or urlsplit(url).fragment:
+            raise ValueError('DeepSeek API 地址不能包含凭据、查询参数或片段。')
+        protocol=settings.deepseek_protocol
+        if protocol not in ('messages','chat_completions'):raise ValueError('未知 DeepSeek 接口。')
+        if protocol=='messages' and url in ('https://api.deepseek.com','https://api.deepseek.com/v1'):
+            url='https://api.deepseek.com/anthropic'
+        return Provider('deepseek:direct','DeepSeek API','deepseek',url,key,settings.model.strip() or settings.deepseek_model,'deepseek_messages' if protocol=='messages' else 'chat_completions',False)
     items = providers(settings.cc_database)
     if settings.provider:
         items = [p for p in items if p.identity == settings.provider]
