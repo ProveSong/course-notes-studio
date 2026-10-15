@@ -138,7 +138,7 @@ def visual_settings(settings):
 
 def selected_provider(settings: Settings):
     if settings.provider=='deepseek:direct':
-        from .secrets import deepseek_key
+        from .credential_store import deepseek_key
         from urllib.parse import urlsplit
         key=deepseek_key()
         if not key:raise ValueError('请在首次配置中填写 DeepSeek API Key，或设置 DEEPSEEK_API_KEY。')

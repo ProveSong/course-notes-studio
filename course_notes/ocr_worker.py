@@ -53,7 +53,7 @@ for row in request['rows']:
         height,width=array.shape[:2]
         for prediction in predictions:
             for text,box in zip(prediction.get('rec_texts',[]),prediction.get('rec_polys',[])):
-                box=np.asarray(box)
+                box=np.asarray(box,dtype=np.float32)
                 regions.append({'text':text,'bbox':[max(0,int(box[:,0].min()*1000/width)-6),max(0,int(box[:,1].min()*1000/height)-10),min(1000,int(np.ceil(box[:,0].max()*1000/width))+6),min(1000,int(np.ceil(box[:,1].max()*1000/height))+10)]})
     else:
         arr=cv2.imdecode(np.frombuffer(image.read_bytes(),dtype=np.uint8),cv2.IMREAD_COLOR); crops=[];boxes=[]

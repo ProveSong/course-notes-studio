@@ -39,7 +39,7 @@ class DeepSeekTests(unittest.TestCase):
             self.assertEqual(p.base_url,'https://api.deepseek.com/anthropic')
     @unittest.skipUnless(os.name=='nt','DPAPI requires Windows')
     def test_dpapi_roundtrip(self):
-        from course_notes.secrets import crypt
+        from course_notes.credential_store import crypt
         encrypted=crypt(b'local-test-secret')
         self.assertNotIn(b'local-test-secret',encrypted)
         self.assertEqual(crypt(encrypted,True),b'local-test-secret')

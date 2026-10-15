@@ -14,6 +14,7 @@ dist/
 *.spec
 *.log
 *.dpapi
+control.json
 .codex-conversations/
 *-conversation.json
 *.mp4

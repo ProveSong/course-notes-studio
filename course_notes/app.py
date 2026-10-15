@@ -8,8 +8,8 @@ from .pipeline import run_safe
 
 
 class App(tk.Tk):
-    def __init__(self):
-        super().__init__(); self.title('Course Notes Studio 0.2.1 · 课程回放讲义整理器'); self.geometry('1000x780'); self.cancel=threading.Event()
+    def __init__(self,enable_control=True):
+        super().__init__(); self.title('Course Notes Studio 0.2.2 · 课程回放讲义整理器'); self.geometry('1000x780'); self.cancel=threading.Event()
         self.video=tk.StringVar(); self.output=tk.StringVar(value=Settings.load().output_root); self.status=tk.StringVar(value='选择课程视频后开始')
         self._row('课程视频',self.video,True); self._row('输出目录',self.output,False)
         self.settings=Settings.load()
@@ -60,6 +60,9 @@ class App(tk.Tk):
         self.shutdown=tk.BooleanVar(value=False); ttk.Checkbutton(self,text='完成后自动关机（需明确勾选）',variable=self.shutdown).pack(anchor='w',padx=14)
         self.log=tk.Text(self,height=6,state='disabled'); self.log.pack(fill='both',expand=True,padx=14,pady=8)
         self.after(1000,self.poll_progress)
+        if enable_control:
+            from .local_control import serve
+            self.control=serve(self)
     def _row(self,label,var,browse):
         f=ttk.Frame(self); f.pack(fill='x',padx=14,pady=8); ttk.Label(f,text=label,width=12).pack(side='left'); ttk.Entry(f,textvariable=var).pack(side='left',fill='x',expand=True)
         if browse: ttk.Button(f,text='选择',command=lambda:self.pick(var,False)).pack(side='left',padx=6)
@@ -106,6 +109,8 @@ class App(tk.Tk):
         if settings.provider=='deepseek:direct':settings.llm_transport='api';self.transport_choice.set('api')
         from .config import selected_provider,visual_settings
         try:
+            from .diagnostics import validate_local_runtime
+            validate_local_runtime(settings)
             selected_provider(settings)
             if self.auto_images.get():selected_provider(visual_settings(settings))
         except Exception as error:messagebox.showerror('配置错误',str(error));return
@@ -182,7 +187,7 @@ class App(tk.Tk):
             result.delete('1.0','end')
             for name,ok,detail in checks(self.settings):result.insert('end',('✓ ' if ok else '✗ ')+name+'：'+detail+'\n')
         def save():
-            from .secrets import save_deepseek_key
+            from .credential_store import save_deepseek_key
             for key,var in fields.items():setattr(self.settings,key,var.get())
             if key_value.get().strip():
                 try:save_deepseek_key(key_value.get());key_value.set('')

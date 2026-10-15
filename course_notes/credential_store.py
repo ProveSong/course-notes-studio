@@ -1,4 +1,4 @@
-"""Windows DPAPI storage; keys never enter settings or task manifests."""
+"""Windows DPAPI storage; avoid shadowing Python's standard secrets module."""
 import ctypes,os
 from ctypes import wintypes
 from .config import ROOT
