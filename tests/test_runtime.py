@@ -6,9 +6,15 @@ import requests
 from course_notes.config import Settings
 from course_notes.diagnostics import validate_local_runtime
 from course_notes.local_control import serve
+from course_notes.process import run_command
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_worker_logs_support_characters_outside_gbk(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log=Path(directory)/'worker.log'
+            run_command([sys.executable,'-c','print(chr(0xfffd)+chr(0x1d70b))'],log,threading.Event())
+            self.assertIn(chr(0xfffd)+chr(0x1d70b),log.read_text('utf-8'))
     def test_workers_import_standard_secrets(self):
         worker=Path(__file__).resolve().parents[1]/'course_notes'
         result=subprocess.run([sys.executable,'-c','import secrets; print(secrets.token_hex(8))'],cwd=worker,capture_output=True,text=True)

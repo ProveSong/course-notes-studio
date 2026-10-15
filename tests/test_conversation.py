@@ -6,9 +6,30 @@ from unittest.mock import patch
 from course_notes.config import Settings
 from course_notes.llm import call
 from course_notes.codex_cli import call_cli
+from course_notes.conversation import Conversation
 
 
 class ConversationTests(unittest.TestCase):
+    def test_compaction_keeps_conversation_identity_and_archives_complete_history(self):
+        provider=SimpleNamespace(identity='fixture',base_url='https://example.test',model='test',wire_api='responses')
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'conversation.json'
+            session=Conversation(path,provider)
+            for index in range(7):
+                session.commit({'role':'user','content':str(index)*25000},'answer')
+                session=Conversation(path,provider)
+            identity=session.row['id'];history=session.messages
+            with patch('course_notes.llm._call',return_value='{"context_summary":"Existing course context"}') as remote:
+                result=Conversation(path,provider,Settings())
+            self.assertEqual(result.row['id'],identity)
+            self.assertEqual(result.messages[:2],history[:2])
+            self.assertEqual(result.messages[-2:],history[-2:])
+            self.assertLess(len(result.messages),len(history))
+            archive=json.loads(next(path.parent.glob('*checkpoint-001.json')).read_text('utf-8'))
+            self.assertEqual(archive['messages'],history)
+            self.assertEqual(remote.call_args.kwargs['history'],history)
+            with patch('course_notes.llm._call') as remote:
+                Conversation(path,provider,Settings());remote.assert_not_called()
     def test_same_prefix_across_text_vision_and_restart(self):
         p=SimpleNamespace(identity='deepseek:direct',base_url='https://example.test',model='deepseek-flash',wire_api='deepseek_messages',key='fixture-key')
         captured=[]

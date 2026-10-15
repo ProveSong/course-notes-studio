@@ -1,6 +1,8 @@
 """DeepRead inference adapter: local model files and network-blocked subprocess."""
 import json, os, socket, sys
 from pathlib import Path
+sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
+sys.stderr.reconfigure(encoding='utf-8',errors='backslashreplace')
 request=json.loads(Path(sys.argv[1]).read_text('utf-8'))
 root=Path(request['root']); job=Path(request['job']); models=root/'models'
 cuda_dirs=[root/'.venv-paddle/Lib/site-packages/torch/lib']

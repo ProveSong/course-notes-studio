@@ -1,9 +1,18 @@
 import json,unittest
-from course_notes.compact import clean_text,pack
+from course_notes.compact import clean_text,pack,formula_candidate
 from course_notes.llm import prompt
 
 
 class CompactTests(unittest.TestCase):
+    def test_broken_model_output_keeps_review_region_without_token_noise(self):
+        raw={'latex':'\\overrightarrow'*200,'bbox':[0,0,100,100],'status':'candidate-unverified'}
+        packed=formula_candidate(raw)
+        self.assertNotIn('latex',packed)
+        self.assertEqual(packed['bbox'],raw['bbox'])
+        self.assertEqual(packed['status'],'needs-visual-review')
+        self.assertEqual(len(raw['latex']),len('\\overrightarrow')*200)
+        valid={'latex':'\\frac{a+b}{c}','bbox':[0,0,100,100],'status':'candidate-unverified'}
+        self.assertEqual(formula_candidate(valid)['latex'],valid['latex'])
     def test_noise_removed_but_question_and_aside_retained(self):
         self.assertEqual(clean_text('继续播放 不知道。\nCopyright 2024 publisher\n不知道为什么这个集合没有上确界？\n老师讲了猜考题的玩笑。'),
                          '不知道为什么这个集合没有上确界？\n老师讲了猜考题的玩笑。')

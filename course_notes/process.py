@@ -18,7 +18,8 @@ def run_command(command, log_path: Path, cancel: threading.Event, cwd=None):
     """Use file-backed output to avoid pipe deadlocks and unbounded memory."""
     check_cancel(cancel)
     with log_path.open('w', encoding='utf-8') as out:
-        proc = subprocess.Popen([str(x) for x in command], cwd=cwd, stdout=out,
+        env={**os.environ,'PYTHONUTF8':'1','PYTHONIOENCODING':'utf-8:backslashreplace'}
+        proc = subprocess.Popen([str(x) for x in command], cwd=cwd, stdout=out,env=env,
                                 stderr=subprocess.STDOUT,
                                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         try:

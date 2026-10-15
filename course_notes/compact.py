@@ -2,7 +2,19 @@
 import re
 import json
 
-VERSION = 'compact-1'
+VERSION = 'compact-2'
+
+
+def formula_candidate(formula):
+    value={k:formula[k] for k in ('latex','bbox','status','confidence','uncertainty','syntax_warnings') if k in formula and formula[k]}
+    latex=str(formula.get('latex',''))
+    if formula.get('status')=='candidate-unverified' and (formula.get('syntax_warnings') or re.search(r'(.{4,100}?)\1{5,}',latex)):
+        value.pop('latex',None);value.pop('syntax_warnings',None)
+        value.update(status='needs-visual-review')
+    elif value.get('status')=='candidate-unverified':
+        # The prompt already states all local candidates are unverified.
+        value.pop('status')
+    return value
 
 
 def clean_text(text):
@@ -30,8 +42,7 @@ def pack(evidence):
     last_signature = None
     for item in evidence.get('visuals', []):
         text = clean_text(item.get('ocr_text', ''))
-        formulas = [{k: f[k] for k in ('latex', 'bbox', 'status', 'confidence', 'uncertainty', 'syntax_warnings') if k in f and f[k]}
-                    for f in item.get('local_formulas', [])]
+        formulas = [formula_candidate(f) for f in item.get('local_formulas', [])]
         value = {'id': item['id'], 'time': item['time'], 'text': text}
         if formulas:
             value['formulas'] = formulas
