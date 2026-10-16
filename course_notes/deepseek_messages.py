@@ -40,6 +40,19 @@ def user_message(provider,prompt,images):
 
 
 def call_messages(settings, provider, prompt, images=(), cancel=None, history=()):
+    """Budget recovery applies to text, vision, repair AND session compaction."""
+    from dataclasses import replace
+    budget=settings.llm_max_output_tokens
+    while True:
+        try:
+            return _call_messages(replace(settings,llm_max_output_tokens=budget),provider,prompt,images,cancel,history)
+        except RuntimeError as error:
+            if '未完整结束：max_tokens' not in str(error) or budget>=32000:
+                raise
+            budget=min(32000,max(16000,budget*2))
+
+
+def _call_messages(settings, provider, prompt, images=(), cancel=None, history=()):
     from .llm import endpoint
     message=user_message(provider,prompt,images)
     if cancel:check_cancel(cancel)

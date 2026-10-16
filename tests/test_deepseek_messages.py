@@ -45,6 +45,18 @@ class MessagesTests(unittest.TestCase):
         self.assertEqual(request.kwargs['json']['output_config'],{'effort':'high'})
         self.assertEqual(json.loads(result)['markdown'],'公式复核')
 
+    def test_budget_recovery_preserves_history_and_reasoning(self):
+        from course_notes.deepseek_messages import call_messages
+        provider=SimpleNamespace(model='deepseek-flash')
+        history=[{'role':'assistant','content':'prior context'}]
+        with patch('course_notes.deepseek_messages._call_messages',side_effect=[
+                RuntimeError('DeepSeek Messages 输出未完整结束：max_tokens'),'{"markdown":"complete"}']) as remote:
+            result=call_messages(Settings(deepseek_reasoning_effort='medium'),provider,'same evidence',history=history)
+        self.assertEqual(json.loads(result)['markdown'],'complete')
+        self.assertEqual([c.args[0].llm_max_output_tokens for c in remote.call_args_list],[10000,20000])
+        self.assertTrue(all(c.args[0].deepseek_reasoning_effort=='medium' for c in remote.call_args_list))
+        self.assertTrue(all(c.args[-1] is history for c in remote.call_args_list))
+
     def test_unknown_effort_fails_before_network(self):
         with self.assertRaisesRegex(ValueError,'思考强度'):self.invoke(self.events(),effort='unknown')
 
