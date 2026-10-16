@@ -28,6 +28,8 @@ class ConversationTests(unittest.TestCase):
             archive=json.loads(next(path.parent.glob('*checkpoint-001.json')).read_text('utf-8'))
             self.assertEqual(archive['messages'],history)
             self.assertEqual(remote.call_args.kwargs['history'],history)
+            self.assertGreaterEqual(remote.call_args.args[0].llm_max_output_tokens,8000)
+            self.assertEqual(remote.call_args.args[0].deepseek_reasoning_effort,Settings().deepseek_reasoning_effort)
             with patch('course_notes.llm._call') as remote:
                 Conversation(path,provider,Settings());remote.assert_not_called()
     def test_same_prefix_across_text_vision_and_restart(self):

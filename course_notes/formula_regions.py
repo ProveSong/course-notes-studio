@@ -22,15 +22,14 @@ def candidates(row):
         # Long prose lines and player chrome should not bridge columns.
         if len(re.findall(r'[\u4e00-\u9fff]',text))>12:continue
         regions.append((list(box),text))
-    groups=[([box], [text]) for box,text in regions]
     def bounds(boxes):return [min(b[0] for b in boxes),min(b[1] for b in boxes),max(b[2] for b in boxes),max(b[3] for b in boxes)]
-    changed=True
-    while changed:
-        changed=False
-        for i in range(len(groups)):
-            if changed:break
-            for j in range(i+1,len(groups)):
-                a,ta=groups[i];b,tb=groups[j];x=bounds(a);y=bounds(b)
+    # One spatially sorted pass rather than restarting an all-pairs search
+    # after every merge. A line's full baseline band still bounds each merge.
+    groups=[]
+    for box,text in sorted(regions,key=lambda item:(item[0][0],item[0][1])):
+        merged=False
+        for i in range(len(groups)-1,-1,-1):
+                a,ta=groups[i];b=[box];tb=[text];x=bounds(a);y=box
                 ha=x[3]-x[1];hb=y[3]-y[1]
                 overlap=max(0,min(x[3],y[3])-max(x[1],y[1]))
                 gap=max(0,max(x[0],y[0])-min(x[2],y[2]))
@@ -41,7 +40,8 @@ def candidates(row):
                 # baseline band prevents transitive merging of entire boards.
                 same_line=overlap>=.6*min(ha,hb) and max(centers)-min(centers)<=.32*height
                 if same_line and gap<=min(45,max(18,1.2*min(ha,hb))):
-                    groups[i]=(a+b,ta+tb);groups.pop(j);changed=True;break
+                    groups[i]=(a+b,ta+tb);merged=True;break
+        if not merged:groups.append(([box],[text]))
     for boxes,texts in groups:
         if not any(MATH.search(t) for t in texts):continue
         box=bounds(boxes)

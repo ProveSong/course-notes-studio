@@ -61,7 +61,8 @@ def register(job, chunk_id, requests, visuals):
             identity=f'{chunk_id}-{visual["id"]}'
             if any(r['id']==identity for r in records): continue
             records.append({'id':identity,'chunk':chunk_id,'visual_id':visual['id'],'image':visual['image'],
-                            'time':visual['time'],'sha256':digest(image),'reason':str(request.get('reason','需视觉复核')),'status':'pending'})
+                            'time':visual['time'],'sha256':digest(image),'reason':str(request.get('reason','需视觉复核')),'status':'pending',
+                            'whole_page':bool(request.get('whole_page',False))})
 
 
 def decide(job, ids, settings, approve=True):
@@ -105,6 +106,8 @@ def process_approved(job, settings, notify, cancel, only_ids=None):
         anchor=base.find(record['visual_id'])
         base=base[max(0,anchor-2000):max(0,anchor-2000)+6000] if anchor>=0 else base[:6000]
         instructions=(RESOURCES/'skills/board-structure/SKILL.md').read_text('utf-8')
+        if record.get('whole_page'):
+            instructions+='\n本次为整块黑板/整张幻灯片理解：先看整页版面，再定位完整的二维公式块（多行推导、分式、上下标不能拆成小符号），输出该页有用的公式和图形。额外返回 page_blocks 数组，每块包含 kind（text/formula/diagram）、content（忠实内容，不猜补）、bbox（0–1000）、uncertainty。文字保留必要内容，不含版权/播放器杂字。page_blocks 保存在本地供相邻页面精确去重；markdown 只保留必要解释。仍返回 markdown、formulas、diagrams 字段。'
         notify('截图复核',record['id'])
         if settings.compact_notes:
             from .compact import pack,dumps
@@ -118,7 +121,8 @@ def process_approved(job, settings, notify, cancel, only_ids=None):
             review_prompt=instructions+'\n复核问题：'+record['reason']+'\n讲义：'+base+'\n证据：'+json.dumps(chunk,ensure_ascii=False)
         text=call(settings,review_prompt,[image],cancel=cancel)
         result=parse_json(text)
-        if not isinstance(result.get('markdown'),str) or not result['markdown'].strip(): raise ValueError('视觉复核结果为空。')
+        full_page_content=record.get('whole_page') and isinstance(result.get('page_blocks'),list) and bool(result['page_blocks'])
+        if not isinstance(result.get('markdown'),str) or (not result['markdown'].strip() and not full_page_content): raise ValueError('视觉复核结果为空。')
         if 'formulas' in result or 'diagrams' in result:
             from .board_assets import materialize
             (job/'chunks'/f'{record["id"]}.structured-review.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),'utf-8')

@@ -3,7 +3,7 @@ import re
 import json
 from .input_cleaner import clean_text,clean_visual,line_key
 
-VERSION = 'compact-4'
+VERSION = 'compact-5'
 
 
 def formula_candidate(formula):
@@ -74,6 +74,8 @@ def pack(evidence):
             value.pop('formulas')
             value['formula_ids']=ids
         result['visuals'].append(value)
+    from .page_context import delta_visuals
+    result['visuals']=delta_visuals(result['visuals'])
     if formula_pool:result['formula_candidates']=formula_pool
     if line_pool:result['ocr_lines']=line_pool
     for key in ('context_before', 'context_after'):

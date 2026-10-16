@@ -103,7 +103,9 @@ class Conversation:
             'Treat OCR formulas as unverified unless reviewed. Do not invent facts. Original notes and complete '
             'evidence remain stored locally; this summary is context, not a replacement handout.')
         history=economical_history(self.messages)[0]
-        raw=_call(replace(settings,llm_max_output_tokens=2400),instructions,cancel=cancel,history=history)
+        # Thinking shares the output budget; keep the summary short while allowing
+        # the configured reasoning effort enough room to finish valid JSON.
+        raw=_call(replace(settings,llm_max_output_tokens=max(8000,settings.llm_max_output_tokens)),instructions,cancel=cancel,history=history)
         summary=parse_json(raw).get('context_summary')
         if not isinstance(summary,str) or not summary.strip():raise ValueError('对话压缩没有返回有效课程上下文；原始历史保留。')
         number=len(self.row.get('compactions',[]))+1
