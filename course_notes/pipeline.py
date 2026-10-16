@@ -171,6 +171,7 @@ def run(video: Path, output: Path, settings=None, notify=lambda a,b:None, cancel
                 return fingerprint,raw,None
             except ValueError:pass
         import time
+        last_error=''
         for attempt in range(3):
             check_cancel(cancel)
             try:
@@ -178,10 +179,20 @@ def run(video: Path, output: Path, settings=None, notify=lambda a,b:None, cancel
                     import uuid
                     (chunks/f'{name}.invalid-{uuid.uuid4().hex[:8]}.txt').write_text(raw,'utf-8')
                     raw=repair_handout(settings,raw,cancel)
-                else:raw=generate(current,settings,context,notify,cancel)
+                else:
+                    # DeepSeek thinking tokens share the Messages max_tokens
+                    # budget. If a valid JSON answer is cut off, retry once
+                    # with a larger budget while keeping the user's medium
+                    # reasoning effort enabled and the same evidence scope.
+                    from dataclasses import replace
+                    retry_settings = settings
+                    if attempt > 0 and 'max_tokens' in last_error:
+                        retry_settings = replace(settings, llm_max_output_tokens=max(16000, settings.llm_max_output_tokens))
+                    raw=generate(current,retry_settings,context,notify,cancel)
                 validate_handout(raw)
                 break
             except Exception as error:
+                last_error=str(error)
                 (chunks/f'{name}.error.txt').write_text(str(error),'utf-8')
                 if attempt==2: raise
                 check_cancel(cancel); notify('讲义整合',f'{name} 接口失败，重试 {attempt+1}/2'); time.sleep(2)
