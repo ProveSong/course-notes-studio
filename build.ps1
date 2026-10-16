@@ -16,6 +16,6 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'course_notes') -Destination $bu
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LICENSES') -Destination $bundle -Recurse -Force
 & $buildPython collect_licenses.py (Join-Path $bundle 'LICENSES/dependencies')
 if ($LASTEXITCODE -ne 0) {throw 'Dependency license collection failed'}
-& $buildPython package_zip.py $bundle 'dist/CourseNotesStudio-0.2.4-windows-x64.zip'
+& $buildPython package_zip.py $bundle 'dist/CourseNotesStudio-0.2.5-windows-x64.zip'
 if ($LASTEXITCODE -ne 0) {throw 'Archive creation failed'}
-Write-Host 'Built dist/CourseNotesStudio-0.2.4-windows-x64.zip'
+Write-Host 'Built dist/CourseNotesStudio-0.2.5-windows-x64.zip'

@@ -23,9 +23,21 @@ class CompactTests(unittest.TestCase):
             for i,text in enumerate(['x=1','x=1','x=2','x=1','',''])]}
         packed,audit=pack(evidence)
         self.assertEqual([x['text'] for x in packed['visuals']],['x=1','x=2','x=1','',''])
-        self.assertEqual(packed['visuals'][0]['alternates'],[['1',1]])
+        self.assertNotIn('alternates',packed['visuals'][0])
         self.assertEqual(audit['visual_aliases'],{'1':'0'})
         self.assertNotIn('ocr_warning',json.dumps(packed))
+
+    def test_formula_coordinates_and_duplicate_candidates_stay_local(self):
+        formulas=[{'latex':'x+y','bbox':[i,0,i+2,2],'confidence':0.7,'status':'candidate-unverified'} for i in range(30)]
+        evidence={'start':0,'end':10,'visuals':[
+            {'id':'V1','time':0,'ocr_text':'方程','local_formulas':formulas},
+            {'id':'V2','time':5,'ocr_text':'方程','local_formulas':[dict(f,bbox=[9,9,10,10]) for f in formulas]}]}
+        packed,audit=pack(evidence)
+        self.assertEqual(packed['formula_candidates'],['x+y'])
+        self.assertEqual(packed['visuals'][0]['formula_ids'],[1])
+        self.assertEqual(audit['visual_aliases'],{'V2':'V1'})
+        self.assertEqual(len(formulas),30)
+        self.assertNotIn('bbox',json.dumps(packed))
 
     def test_long_content_preserved_and_context_not_duplicated(self):
         text='推导不可省略。'*1000

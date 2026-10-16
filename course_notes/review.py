@@ -77,7 +77,8 @@ def decide(job, ids, settings, approve=True):
 
 def process_approved(job, settings, notify, cancel, only_ids=None):
     from dataclasses import replace
-    settings=replace(settings,conversation_file=str(job/'deepseek-conversation.json'))
+    from .task_session import for_job
+    settings=for_job(settings,job)
     apply_task_consent(job,settings)
     path=job/'review-requests.json'
     if not path.exists(): return
@@ -108,8 +109,10 @@ def process_approved(job, settings, notify, cancel, only_ids=None):
         if settings.compact_notes:
             from .compact import pack,dumps
             chunk.setdefault('start',max(0,moment-30));chunk.setdefault('end',moment+30)
+            # Select the approved frame before deduplication so its exact ID is
+            # retained even when an earlier neighboring frame has identical OCR.
+            chunk['visuals']=[v for v in chunk['visuals'] if v['id']==record['visual_id']]
             compact=pack(chunk)[0]
-            compact['visuals']=[v for v in compact['visuals'] if v['id']==record['visual_id'] or any(a[0]==record['visual_id'] for a in v.get('alternates',[]))]
             review_prompt=instructions+'\n复核问题：'+record['reason']+'\n相关文字：'+dumps(compact)
         else:
             review_prompt=instructions+'\n复核问题：'+record['reason']+'\n讲义：'+base+'\n证据：'+json.dumps(chunk,ensure_ascii=False)

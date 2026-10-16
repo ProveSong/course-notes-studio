@@ -22,9 +22,9 @@ class ConversationTests(unittest.TestCase):
             with patch('course_notes.llm._call',return_value='{"context_summary":"Existing course context"}') as remote:
                 result=Conversation(path,provider,Settings())
             self.assertEqual(result.row['id'],identity)
-            self.assertEqual(result.messages[:2],history[:2])
-            self.assertEqual(result.messages[-2:],history[-2:])
             self.assertLess(len(result.messages),len(history))
+            from course_notes.conversation import text_size,HISTORY_CHARACTER_BUDGET
+            self.assertLess(text_size(result.messages),HISTORY_CHARACTER_BUDGET)
             archive=json.loads(next(path.parent.glob('*checkpoint-001.json')).read_text('utf-8'))
             self.assertEqual(archive['messages'],history)
             self.assertEqual(remote.call_args.kwargs['history'],history)
@@ -45,7 +45,8 @@ class ConversationTests(unittest.TestCase):
                 call(replace(s),'third JSON')
                 self.assertEqual([len(h) for h in captured],[0,2,4])
                 self.assertEqual(captured[2][:2],captured[1])
-                self.assertEqual(captured[2][2]['content'][1]['source']['media_type'],'image/png')
+                self.assertNotIn('base64',json.dumps(captured[2]))
+                self.assertIn('image/png',path.read_text('utf-8'))
                 history=path.read_bytes()
                 with patch('course_notes.deepseek_messages.call_messages',side_effect=RuntimeError('offline')):
                     with self.assertRaises(RuntimeError):call(s,'failed')
@@ -55,6 +56,25 @@ class ConversationTests(unittest.TestCase):
                 call(replace(s,conversation_file=str(Path(directory)/'other-video.json')),'other video')
                 self.assertEqual(captured[-1],[])
                 self.assertNotIn('fixture-key',path.read_text('utf-8'))
+
+    def test_rules_sent_once_video_scope_preserved_and_images_not_replayed(self):
+        from course_notes.conversation import economical_history
+        prefix='讲义规则：不省略推导。'
+        messages=[{'role':'user','task_video':'video-1','content':prefix+'\n材料：旧材料'},
+                  {'role':'assistant','content':'旧讲义'},
+                  {'role':'user','task_video':'video-2','content':[{'type':'text','text':prefix+'\n材料：新材料'},
+                      {'type':'image','source':{'data':'private-base64'}}]},
+                  {'role':'assistant','content':'新讲义'}]
+        result,seen=economical_history(messages)
+        serialized=json.dumps(result,ensure_ascii=False)
+        self.assertEqual(serialized.count(prefix),1)
+        self.assertIn('video-1',serialized);self.assertIn('video-2',serialized)
+        self.assertNotIn('private-base64',serialized)
+        self.assertNotIn('旧材料',serialized)
+        self.assertNotIn('新材料',serialized)
+        self.assertIn('旧讲义',serialized);self.assertIn('新讲义',serialized)
+        self.assertNotIn('task_video',serialized)
+        self.assertIn('private-base64',json.dumps(messages))
 
     def test_codex_resumes_exact_thread_and_keeps_private_home(self):
         provider=SimpleNamespace(identity='codex:test',base_url='https://example.test',model='test',wire_api='responses',app='codex',key='fixture-key')

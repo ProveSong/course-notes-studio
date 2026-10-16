@@ -5,6 +5,31 @@ from course_notes.batch import run_batch,plan
 from course_notes.config import Settings
 
 class BatchTests(unittest.TestCase):
+    def test_whole_task_and_review_share_session_and_resume_legacy_id(self):
+        import json
+        from course_notes.config import Settings
+        from course_notes.conversation import Conversation
+        from course_notes.task_session import for_job
+        from types import SimpleNamespace
+        provider=SimpleNamespace(identity='deepseek:direct',base_url='https://example.test',model='deepseek-flash',wire_api='deepseek_messages')
+        with tempfile.TemporaryDirectory() as root:
+            out=Path(root);legacy=out/'b_job'/'deepseek-conversation.json'
+            old=Conversation(legacy,provider);old.commit({'role':'user','content':'previous task context'},'answer')
+            seen=[]
+            def run(video,directory,settings,*args,**kwargs):
+                seen.append(settings)
+                job=directory/(video.stem+'_job');job.mkdir(exist_ok=True)
+                (job/'manifest.json').write_text(json.dumps({'conversation_file':settings.conversation_file,'conversation_video':settings.conversation_video}),'utf-8')
+                self.assertEqual(for_job(Settings(),job).conversation_file,settings.conversation_file)
+                return directory/'result.md'
+            with patch('course_notes.config.selected_provider',return_value=provider),patch('course_notes.batch.run_safe',side_effect=run):
+                run_batch(['a.mp4','b.mp4'],out,Settings(),lambda *a:None,threading.Event())
+                run_batch(['a.mp4','b.mp4'],out,Settings(),lambda *a:None,threading.Event())
+            self.assertEqual(len({s.conversation_file for s in seen}),1)
+            self.assertEqual([s.conversation_video for s in seen],['video-1','video-2']*2)
+            migrated=Conversation(Path(seen[0].conversation_file),provider)
+            self.assertEqual(migrated.row['id'],old.row['id'])
+            self.assertTrue(legacy.exists())
     def test_dedup_and_same_named_videos_are_separate(self):
         items=plan(['one/lecture.mp4','two/lecture.mp4','one/lecture.mp4'],'out')
         self.assertEqual(len(items),2)

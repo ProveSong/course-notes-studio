@@ -2,7 +2,7 @@
 import re
 import json
 
-VERSION = 'compact-2'
+VERSION = 'compact-3'
 
 
 def formula_candidate(formula):
@@ -32,6 +32,7 @@ def clean_text(text):
 def pack(evidence):
     """No arbitrary truncation of teaching content; dedup only adjacent visuals."""
     result = {'start': evidence['start'], 'end': evidence['end'], 'speech': [], 'visuals': []}
+    formula_pool=[];formula_indices={}
     audit = {'version': VERSION, 'filtered_speech': [], 'visual_aliases': {}, 'empty_visuals': []}
     for item in evidence.get('speech', []):
         text = clean_text(item['text'])
@@ -42,19 +43,40 @@ def pack(evidence):
     last_signature = None
     for item in evidence.get('visuals', []):
         text = clean_text(item.get('ocr_text', ''))
-        formulas = [formula_candidate(f) for f in item.get('local_formulas', [])]
+        # Crop coordinates, confidence and duplicate recognition candidates stay
+        # in local evidence. Text integration needs each distinct reading once.
+        formulas=[];seen_formulas=set();needs_review=False
+        for candidate in item.get('local_formulas', []):
+            value=formula_candidate(candidate)
+            latex=value.get('latex','')
+            if not latex:
+                needs_review=True
+                continue
+            if latex not in seen_formulas:
+                formulas.append({'latex':latex});seen_formulas.add(latex)
         value = {'id': item['id'], 'time': item['time'], 'text': text}
         if formulas:
             value['formulas'] = formulas
-        signature = json.dumps([text, formulas], ensure_ascii=False, sort_keys=True)
+        if needs_review:value['formula_review_needed']=True
+        signature = json.dumps([text, formulas,needs_review], ensure_ascii=False, sort_keys=True)
         if (text or formulas) and signature == last_signature:
             audit['visual_aliases'][item['id']] = result['visuals'][-1]['id']
-            result['visuals'][-1].setdefault('alternates',[]).append([item['id'],item['time']])
             continue
         last_signature = signature
         if not text and not formulas:
             audit['empty_visuals'].append(item['id'])
+        if formulas:
+            ids=[]
+            for formula in formulas:
+                latex=formula['latex']
+                if latex not in formula_indices:
+                    formula_indices[latex]=len(formula_pool)+1
+                    formula_pool.append(latex)
+                ids.append(formula_indices[latex])
+            value.pop('formulas')
+            value['formula_ids']=ids
         result['visuals'].append(value)
+    if formula_pool:result['formula_candidates']=formula_pool
     for key in ('context_before', 'context_after'):
         result[key] = [{'text': text} for item in evidence.get(key, [])
                        if (text := clean_text(item['text']))]

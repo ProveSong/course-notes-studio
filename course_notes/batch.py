@@ -19,9 +19,12 @@ def plan(videos,output):
 
 def run_batch(videos,output,settings,notify,cancel,auto_approve_images=False,on_video=lambda *args:None):
     entries=plan(videos,output);report=[];Path(output).mkdir(parents=True,exist_ok=True)
+    check_cancel(cancel)
+    from .task_session import batch_settings
+    settings=batch_settings(entries,output,settings)
     for index,(video,directory) in enumerate(entries,1):
         check_cancel(cancel);on_video(index,len(entries),video,directory)
-        current=replace(settings)
+        current=replace(settings,conversation_video=f'video-{index}')
         manifest=directory/(video.stem+'_job')/'manifest.json'
         try:
             if manifest.exists():current.chunk_seconds=json.loads(manifest.read_text('utf-8')).get('chunk_seconds',current.chunk_seconds)

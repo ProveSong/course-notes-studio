@@ -6,7 +6,7 @@ Windows 桌面 GUI 提供批量视频队列、总进度、阶段进度、取消�
 
 ## 快速开始
 
-1. 从本项目 **Releases** 下载 `CourseNotesStudio-0.2.4-windows-x64.zip`，解压到普通文件夹，双击 `CourseNotesStudio.exe`。GUI 已包含 Python 运行时。
+1. 从本项目 **Releases** 下载 `CourseNotesStudio-0.2.5-windows-x64.zip`，解压到普通文件夹，双击 `CourseNotesStudio.exe`。GUI 已包含 Python 运行时。
 2. 首次使用 GPU OCR：安装 **Python 3.11 x64** 和支持 CUDA 12.6 的 NVIDIA 驱动，然后运行 `setup-gpu.cmd`。该步骤需要联网、数 GB 下载和可用磁盘空间；出现安装错误时终止并显示原因。OCR 推断本身离线运行，禁止 CPU 降级。
 3. 安装 [VideoCaptioner](https://github.com/WEIFENG2333/VideoCaptioner)，在其中下载本地 Faster-Whisper `large-v2` 模型。本程序调用其本机 FFmpeg 和 Faster-Whisper-XXL，不上传音频。
 4. 使用 DeepSeek 时，在“首次配置 / 环境检查”填写 API Key，接口选 `messages`，模型选 `deepseek-flash`，然后在主窗口选择 **DeepSeek API**。也可在 [CC Switch](https://github.com/farion1231/cc-switch) 中配置其他 LLM，选择数据库、供应商、模型与 `api` / `codex_cli`。使用 CLI 时需安装 [Codex CLI](https://github.com/openai/codex)。LLM 服务费用由所选供应商决定。
@@ -26,7 +26,9 @@ Messages 模式默认使用支持图像的 `deepseek-flash`，关闭思考输出
 
 队列按顺序处理，每个视频保存独立讲义与任务目录；同批同名视频用路径摘要区分。某个视频失败后继续下一个，输出目录的 `batch-results.json` 记录成功、失败与任务路径。取消会停止队列。仅全队列成功且没有待复核内容时，才执行用户勾选的完成关机。
 
-同一视频、同一供应商及模型共用持久对话：API 按原顺序携带历史，Codex CLI 使用同一个线程的 `resume`。讲义片段与截图复核顺序执行，重启后恢复历史，不会为每个片段新建对话。不同视频、模型或地址隔离，以免串课或将历史发送给其他供应商。历史保存在任务目录，仅在收到完整响应后提交；保留稳定前缀以利服务端缓存。`llm-usage.json` 保留供应商返回的缓存命中 usage，实际命中率由服务端决定。长课程接近历史预算时，在同一个课程对话内压缩早期上下文，保留固定前缀、课程摘要和最近几轮；原始历史及摘要归档到任务目录的 checkpoint 文件，不删除原始材料或已生成讲义。压缩请求也计入实际 usage。
+整批任务共用一次持久对话：多个视频的讲义、截图复核、修复共用输出目录 `.task-conversations` 中的会话，重启同一队列后继续。视频切换只增加简短标记，防止混入其他视频内容；更换供应商、模型或地址仍隔离历史。旧版队列首次恢复时沿用最后一个已有视频会话的身份，原历史不删除。API 接口无服务器会话时仍需携带必要上下文，Codex CLI 使用同一线程的 `resume`。
+
+完整材料和历史保存在本地，仅在收到完整响应后提交。后续请求保留已生成讲义作为上下文，不重传旧片段的原始材料和已处理截图，相同规则在发送历史中只保留一次；省 token 模式去掉重复公式及不影响文字理解的裁剪坐标、置信度，同一公式只发送一次并用编号引用，完整识别结果仍保存在本地。历史达到预算时，在同一会话内压缩为摘要和最近上下文，原历史另存 checkpoint；不会为每个视频重开会话。`llm-usage.json` 保留服务端返回的实际 token 与缓存 usage，压缩调用也计入其中，不保证服务端缓存命中或固定节省比例。
 
 自动截图授权仅覆盖本次运行的队列及模型请求的已采集画面，不会上传所有采样帧。记录绑定截图哈希、任务、实际供应商地址、模型和调用方式；更换目的地或图片后不会沿用原授权。截图调用会产生 API 费用。
 

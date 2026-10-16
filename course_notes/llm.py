@@ -19,7 +19,8 @@ def call(settings, prompt, images=(), cancel=None):
         from .conversation import conversation
         p=selected_provider(settings)
         with conversation(settings,p,cancel) as session:
-            result=_call(settings,prompt,images,cancel,session.messages)
+            history,wire_prompt=session.request(prompt,getattr(settings,'conversation_video',''))
+            result=_call(settings,wire_prompt,images,cancel,history)
             if p.wire_api=='deepseek_messages':
                 from .deepseek_messages import user_message
                 message=user_message(p,prompt,images)
@@ -32,7 +33,7 @@ def call(settings, prompt, images=(), cancel=None):
                     for path in images:content.append({'type':'image','source':{'type':'base64','media_type':'image/jpeg','data':base64.b64encode(Path(path).read_bytes()).decode('ascii')}})
                 message={'role':'user','content':content}
             else:message={'role':'user','content':prompt}
-            session.commit(message,result)
+            session.commit(message,result,getattr(settings,'conversation_video',''))
             return result
     return _call(settings,prompt,images,cancel)
 

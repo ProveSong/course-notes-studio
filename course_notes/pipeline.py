@@ -101,10 +101,11 @@ def run(video: Path, output: Path, settings=None, notify=lambda a,b:None, cancel
         if old.get('chunk_seconds',settings.chunk_seconds)!=settings.chunk_seconds:
             raise ValueError('分段时长已变化，请使用新的输出目录，避免混合不同时间范围的讲义。')
     from dataclasses import replace
-    settings=replace(settings,conversation_file=str(job/'deepseek-conversation.json'))
+    from .task_session import for_job
+    settings=for_job(settings,job)
     cap=cv2.VideoCapture(str(video)); fps=cap.get(cv2.CAP_PROP_FPS); duration=cap.get(cv2.CAP_PROP_FRAME_COUNT)/fps; cap.release()
     target=output/(video.stem+('—课程讲解.md' if settings.compact_notes else '.md'))
-    save_json(manifest_path,{'signature':signature,'title':video.stem,'duration':duration,'target':str(target),'destination':destination(settings),'chunk_seconds':settings.chunk_seconds,'notes_style':'teaching' if settings.compact_notes else 'evidence'})
+    save_json(manifest_path,{'signature':signature,'title':video.stem,'duration':duration,'target':str(target),'destination':destination(settings),'chunk_seconds':settings.chunk_seconds,'notes_style':'teaching' if settings.compact_notes else 'evidence','conversation_file':settings.conversation_file,'conversation_video':settings.conversation_video})
     speech_path=job/'speech.json'
     speech=json.loads(speech_path.read_text('utf-8')) if speech_path.exists() else transcribe(video,job,settings,cancel,notify)
     speech=[{**s,'id':f'S{i:06d}'} for i,s in enumerate(speech,1)]; save_json(speech_path,speech)

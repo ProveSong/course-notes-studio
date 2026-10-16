@@ -29,6 +29,7 @@ class Settings:
     vision_model: str = ''
     vision_transport: str = 'api'
     conversation_file: str = ''
+    conversation_video: str = ''
     language: str = 'zh'
     whisper_model: str = 'large-v2'
     device: str = 'cuda'
@@ -65,7 +66,7 @@ class Settings:
         return result
 
     def save(self):
-        data=asdict(self);data.pop('conversation_file',None)
+        data=asdict(self);data.pop('conversation_file',None);data.pop('conversation_video',None)
         (ROOT / 'settings.json').write_text(json.dumps(data, ensure_ascii=False, indent=2), 'utf-8')
 
 
