@@ -46,6 +46,8 @@ class Settings:
     compact_notes: bool = True
     llm_max_output_tokens: int = 10000
     formula_backend: str = 'paddle'
+    pix2tex_python: str = ''
+    pix2tex_model_dir: str = ''
     formula_model_dir: str = str(ROOT / 'DeepRead/models/formula')
     ocr_mode: str = 'printed'
     deepread_root: str = str(ROOT / 'DeepRead')

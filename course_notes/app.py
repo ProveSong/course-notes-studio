@@ -34,7 +34,7 @@ class App(tk.Tk):
         self.formula_choice=tk.StringVar(value=self.settings.formula_backend)
         ttk.Button(options,text='首次配置 / 环境检查',command=self.configure).pack(side='right')
         ttk.Label(options,text='本地 GPU 公式识别').pack(side='left',padx=10)
-        ttk.Combobox(options,textvariable=self.formula_choice,values=['paddle','none'],state='readonly',width=10).pack(side='left')
+        ttk.Combobox(options,textvariable=self.formula_choice,values=['paddle','pix2tex','none'],state='readonly',width=10).pack(side='left')
         self.job=None
         self.video_queue=[];self.batch_index=0;self.batch_total=0;self.batch_results=[]
         queue_bar=ttk.Frame(self);queue_bar.pack(fill='x',padx=14)
@@ -151,7 +151,7 @@ class App(tk.Tk):
         from .diagnostics import checks
         window=tk.Toplevel(self);window.title('首次配置与环境检查');window.geometry('840x750')
         fields={}
-        for key,label,directory in [('video_captioner','VideoCaptioner 安装目录',True),('cc_database','CC Switch 数据库',False),('deepread_root','本地 GPU 环境与模型目录',True)]:
+        for key,label,directory in [('video_captioner','VideoCaptioner 安装目录',True),('cc_database','CC Switch 数据库',False),('deepread_root','本地 GPU 环境与模型目录',True),('pix2tex_python','pix2tex Python（可选）',False),('pix2tex_model_dir','pix2tex 权重目录（可选）',True)]:
             row=ttk.Frame(window);row.pack(fill='x',padx=12,pady=6)
             ttk.Label(row,text=label,width=25).pack(side='left')
             variable=tk.StringVar(value=getattr(self.settings,key));fields[key]=variable

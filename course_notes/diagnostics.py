@@ -10,6 +10,11 @@ def validate_local_runtime(settings):
     if settings.formula_backend=='paddle':
         for name in ('inference.json','inference.yml','inference.pdiparams'):
             if not (Path(settings.formula_model_dir)/name).is_file():raise FileNotFoundError('本地公式模型缺少 '+name)
+    elif settings.formula_backend=='pix2tex':
+        python=Path(settings.pix2tex_python) if settings.pix2tex_python else root/'.venv-pix2tex/Scripts/python.exe'
+        if not python.is_file():raise FileNotFoundError('请先部署独立 pix2tex GPU 环境')
+        for name in ('weights.pth','image_resizer.pth'):
+            if not (Path(settings.pix2tex_model_dir)/name).is_file():raise FileNotFoundError('pix2tex 缺少本地权重 '+name)
 
 def checks(settings):
     home=Path(settings.video_captioner);root=Path(settings.deepread_root)
