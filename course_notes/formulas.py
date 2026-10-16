@@ -5,16 +5,7 @@ import re
 import threading
 from pathlib import Path
 from .process import run_command
-
-
-def candidates(row):
-    # Detector polygons are proposals, not proof that the whole formula was
-    # captured. Existing verified board boxes can also be provided explicitly.
-    for region in row.get('ocr_regions', []):
-        text=region.get('text','')
-        if re.search(r'[=∑∫√∞≤≥∈∉⊂∀∃→α-ωΑ-Ω]|[a-zA-Z]\s*\^|\\(?:frac|sum|int)',text):
-            yield {'bbox':region['bbox'],'background':'auto','proposal':'text-detector'}
-    yield from row.get('formula_regions', [])
+from .formula_regions import candidates
 
 
 def annotate_formulas(rows, job, settings, notify, cancel=None):

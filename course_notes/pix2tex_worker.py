@@ -27,8 +27,11 @@ for index,task in enumerate(request['tasks'],1):
     gray=cv2.cvtColor(crop,cv2.COLOR_BGR2GRAY)
     background=task.get('background','auto')
     if background=='dark' or (background=='auto' and np.median(gray)<128):gray=255-gray
+    lo,hi=np.percentile(gray,[2,98])
+    if hi>lo:
+        gray=np.clip((gray.astype(np.float32)-lo)*255/(hi-lo),0,255).astype(np.uint8)
     gray=cv2.copyMakeBorder(gray,12,12,12,12,cv2.BORDER_CONSTANT,value=255)
-    key=hashlib.sha256(gray.tobytes()+str(gray.shape).encode()+request['model_sha256'].encode()+b'pix2tex-v1').hexdigest()
+    key=hashlib.sha256(gray.tobytes()+str(gray.shape).encode()+request['model_sha256'].encode()+b'pix2tex-v2').hexdigest()
     cache=cache_dir/(key+'.json')
     if cache.exists():value=json.loads(cache.read_text('utf-8'))
     else:
@@ -38,7 +41,11 @@ for index,task in enumerate(request['tasks'],1):
             engine.args.temperature=0.01
         torch.manual_seed(0)
         with torch.inference_mode():latex=engine(Image.fromarray(gray))
-        value={'latex':latex,'syntax_warnings':latex_warnings(latex),'backend':'pix2tex-0.1.4','device':'cuda:0','model_sha256':request['model_sha256'],'status':'candidate-unverified'}
+        warnings=latex_warnings(latex)
+        import re
+        if len(latex)>1500 or re.search(r'(.{2,80}?)\1{8,}',latex):
+            warnings.append('Repeated or excessive formula output; needs visual review')
+        value={'latex':latex,'syntax_warnings':warnings,'backend':'pix2tex-0.1.4','device':'cuda:0','model_sha256':request['model_sha256'],'status':'candidate-unverified'}
         cache.write_text(json.dumps(value,ensure_ascii=False),'utf-8');write_image(cache_dir/(key+'.png'),gray)
     records.append({**value,'row':task['row'],'bbox':task['bbox'],'image':task['image'],'crop_sha256':key,'proposal':task.get('proposal','explicit-region')})
     (job/'formulas.json').write_text(json.dumps(records,ensure_ascii=False,indent=2),'utf-8')

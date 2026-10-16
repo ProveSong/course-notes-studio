@@ -8,6 +8,26 @@ from course_notes.pipeline import run
 
 
 class PipelineTests(unittest.TestCase):
+    def test_teaching_assembly_inserts_reviewed_diagram_with_working_job_path(self):
+        from course_notes.pipeline import assemble
+        from course_notes.board_assets import materialize,write_image
+        import numpy as np
+        self.job.joinpath('chunks').mkdir(exist_ok=True)
+        image=np.full((120,180,3),255,np.uint8)
+        image[30:90,50:120]=[20,80,180]
+        source=self.job/'visuals/diagram.png';write_image(source,image)
+        analysis={'markdown':'','formulas':[],'diagrams':[{'title':'实验装置','bbox':[0,0,1000,1000],'background':'preserve','uncertainty':''}]}
+        materialize(self.job,'C0001-V000001',source,analysis)
+        (self.job/'manifest.json').write_text(json.dumps({'title':'lecture','duration':5,'chunk_seconds':5,'notes_style':'teaching'}))
+        (self.job/'evidence.json').write_text(json.dumps({'speech':[],'visuals':[]}))
+        (self.job/'chunks/C0001.md').write_text('## 装置与原理\n\n课堂解释','utf-8')
+        target=self.output/'handout.md';assemble(self.job,target)
+        text=target.read_text('utf-8')
+        self.assertIn('![实验装置](lecture_job/board-assets/C0001-V000001/diagram-01-white.png)',text)
+        self.assertTrue((target.parent/'lecture_job/board-assets/C0001-V000001/diagram-01-white.png').exists())
+        import cv2
+        actual=cv2.imdecode(np.fromfile(self.job/'board-assets/C0001-V000001/diagram-01-white.png',dtype=np.uint8),cv2.IMREAD_COLOR)
+        self.assertTrue(np.array_equal(actual,image))
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(); self.root=Path(self.temp.name)
         self.video=self.root/'lecture.mp4'; self.video.write_bytes(b'fixture')

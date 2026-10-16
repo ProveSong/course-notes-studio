@@ -40,9 +40,11 @@ def assemble(job, target):
                     if key in seen_diagrams:continue
                     seen_diagrams.add(key)
                     sections.append(f'![{title}]({artifact["white"]})')
+        # Both source galleries and reviewed diagrams use job-relative paths.
         # Audit, transcripts and raw screenshot galleries stay in the job folder.
         text='\n\n'.join(sections)+'\n'
         text=text.replace('](board-assets/',f']({job.name}/board-assets/')
+        text=text.replace('](visuals/',f']({job.name}/visuals/')
         target.write_text(text,'utf-8')
         return target
     sections=['# '+manifest['title'],
