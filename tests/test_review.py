@@ -32,6 +32,27 @@ class ReviewTests(unittest.TestCase):
     def test_version_prefix_not_duplicated(self):
         self.assertEqual(endpoint('https://example.test/v1','responses'),'https://example.test/v1/responses')
     @patch('course_notes.review.destination',return_value={'provider':'fixture','base_url':'https://example.test','model':'test'})
+    def test_invalid_crop_is_retried_and_response_reused_after_status_failure(self,destination):
+        import numpy as np
+        from course_notes.board_assets import write_image
+        write_image(self.job/'visuals/a.jpg',np.full((100,100,3),255,np.uint8))
+        # Register before consent because writing a real image changes its digest.
+        records=json.loads((self.job/'review-requests.json').read_text('utf-8'))
+        from course_notes.review import digest
+        records[0]['sha256']=digest(self.job/'visuals/a.jpg')
+        (self.job/'review-requests.json').write_text(json.dumps(records),'utf-8')
+        decide(self.job,['C0001-V000001'],self.s)
+        bad={'markdown':'review','formulas':[{'latex':'x','bbox':[900,0,100,900]}],'diagrams':[]}
+        good={'markdown':'review','formulas':[{'latex':'x','bbox':[0,0,1000,1000]}],'diagrams':[]}
+        with patch('course_notes.review.call',side_effect=[json.dumps(bad),json.dumps(good)]) as remote:
+            process_approved(self.job,self.s,lambda a,b:None,threading.Event())
+        self.assertEqual(remote.call_count,2)
+        self.assertTrue((self.job/'chunks/C0001-V000001.invalid-box-1.json').exists())
+        decide(self.job,['C0001-V000001'],self.s)
+        with patch('course_notes.review.call') as remote:
+            process_approved(self.job,self.s,lambda a,b:None,threading.Event())
+            remote.assert_not_called()
+    @patch('course_notes.review.destination',return_value={'provider':'fixture','base_url':'https://example.test','model':'test'})
     def test_later_requests_survive_slow_review(self,destination):
         decide(self.job,['C0001-V000001'],self.s)
         def during_call(*args,**kwargs):

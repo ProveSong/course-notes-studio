@@ -1,5 +1,5 @@
 """Atomic JSON updates shared by pipeline and screenshot review workers."""
-import json, os, tempfile
+import json, os, tempfile, time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -24,7 +24,15 @@ def transaction(path):
             try:
                 with os.fdopen(fd,'w',encoding='utf-8') as target:
                     json.dump(records,target,ensure_ascii=False,indent=2)
-                os.replace(name,path)
+                # GUI/antivirus readers can briefly deny replacement on Windows.
+                # Retain the transaction lock and the complete temporary file.
+                for attempt in range(8):
+                    try:
+                        os.replace(name,path)
+                        break
+                    except PermissionError:
+                        if attempt==7:raise
+                        time.sleep(.05 * (attempt+1))
             finally:
                 if os.path.exists(name): os.unlink(name)
         finally:

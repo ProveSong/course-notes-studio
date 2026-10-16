@@ -119,8 +119,26 @@ def process_approved(job, settings, notify, cancel, only_ids=None):
             review_prompt=instructions+'\n复核问题：'+record['reason']+'\n相关文字：'+dumps(compact)
         else:
             review_prompt=instructions+'\n复核问题：'+record['reason']+'\n讲义：'+base+'\n证据：'+json.dumps(chunk,ensure_ascii=False)
-        text=call(settings,review_prompt,[image],cancel=cancel)
-        result=parse_json(text)
+        response_path=job/'chunks'/f'{record["id"]}.structured-review.json'
+        # A valid response may already exist when Windows denied the status
+        # commit. Reuse it locally instead of uploading the same screenshot.
+        result=json.loads(response_path.read_text('utf-8')) if response_path.exists() else None
+        feedback=''
+        for attempt in range(3):
+            if result is None:
+                text=call(settings,review_prompt+feedback,[image],cancel=cancel)
+                result=parse_json(text)
+            try:
+                from .board_assets import read_image,crop_box
+                source=read_image(image) if result.get('formulas') or result.get('diagrams') else None
+                for kind in ('formulas','diagrams'):
+                    for item in result.get(kind,[]):crop_box(source,item.get('bbox'))
+                break
+            except (ValueError,TypeError,AttributeError) as error:
+                (job/'chunks'/f'{record["id"]}.invalid-box-{attempt+1}.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),'utf-8')
+                if attempt==2:raise ValueError('截图裁剪坐标多次无效；原响应已保留，未标记复核完成。') from error
+                feedback='\n上次返回的裁剪坐标无效。请重新检查原图，bbox 必须为 [left,top,right,bottom]，四个有限数值，0<=left<right<=1000 且 0<=top<bottom<=1000，裁剪宽高均至少12像素。不要返回零面积、反向或越界框；无法定位则保留不确定说明并省略该裁剪项。'
+                result=None
         full_page_content=record.get('whole_page') and isinstance(result.get('page_blocks'),list) and bool(result['page_blocks'])
         if not isinstance(result.get('markdown'),str) or (not result['markdown'].strip() and not full_page_content): raise ValueError('视觉复核结果为空。')
         if 'formulas' in result or 'diagrams' in result:
