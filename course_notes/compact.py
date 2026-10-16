@@ -1,8 +1,9 @@
 """Source storage stays separate from the small teaching prompt."""
 import re
 import json
+from .input_cleaner import clean_text,clean_visual,line_key
 
-VERSION = 'compact-3'
+VERSION = 'compact-4'
 
 
 def formula_candidate(formula):
@@ -17,23 +18,12 @@ def formula_candidate(formula):
     return value
 
 
-def clean_text(text):
-    lines = []
-    for line in str(text).splitlines():
-        normalized = re.sub(r'[\s。.!！?？,，、：:]+', '', line)
-        if normalized in {'继续播放', '不知道', '继续播放不知道'}:
-            continue
-        if re.fullmatch(r'(?:版权所有|版权归.*所有|Copyright\s*©?\s*\d{4}.*|All rights reserved[.。]?)', line.strip(), re.I):
-            continue
-        lines.append(line.strip())
-    return '\n'.join(lines).strip()
-
-
 def pack(evidence):
     """No arbitrary truncation of teaching content; dedup only adjacent visuals."""
     result = {'start': evidence['start'], 'end': evidence['end'], 'speech': [], 'visuals': []}
     formula_pool=[];formula_indices={}
-    audit = {'version': VERSION, 'filtered_speech': [], 'visual_aliases': {}, 'empty_visuals': []}
+    line_pool=[];line_indices={}
+    audit = {'version': VERSION, 'filtered_speech': [], 'visual_aliases': {}, 'empty_visuals': [],'filtered_visual_lines':{}}
     for item in evidence.get('speech', []):
         text = clean_text(item['text'])
         if not text:
@@ -42,7 +32,8 @@ def pack(evidence):
             result['speech'].append({k: item[k] for k in ('id', 'start', 'end')} | {'text': text})
     last_signature = None
     for item in evidence.get('visuals', []):
-        text = clean_text(item.get('ocr_text', ''))
+        text,filtered = clean_visual(item)
+        if filtered:audit['filtered_visual_lines'][item['id']]=filtered
         # Crop coordinates, confidence and duplicate recognition candidates stay
         # in local evidence. Text integration needs each distinct reading once.
         formulas=[];seen_formulas=set();needs_review=False
@@ -54,17 +45,24 @@ def pack(evidence):
                 continue
             if latex not in seen_formulas:
                 formulas.append({'latex':latex});seen_formulas.add(latex)
-        value = {'id': item['id'], 'time': item['time'], 'text': text}
+        value = {'id': item['id'], 'time': item['time']}
         if formulas:
             value['formulas'] = formulas
         if needs_review:value['formula_review_needed']=True
-        signature = json.dumps([text, formulas,needs_review], ensure_ascii=False, sort_keys=True)
+        signature = json.dumps([line_key(text), formulas,needs_review], ensure_ascii=False, sort_keys=True)
         if (text or formulas) and signature == last_signature:
             audit['visual_aliases'][item['id']] = result['visuals'][-1]['id']
             continue
         last_signature = signature
         if not text and not formulas:
             audit['empty_visuals'].append(item['id'])
+        line_ids=[]
+        for line in text.splitlines():
+            key=line_key(line)
+            if key not in line_indices:
+                line_indices[key]=len(line_pool)+1;line_pool.append(line)
+            line_ids.append(line_indices[key])
+        value['line_ids']=line_ids
         if formulas:
             ids=[]
             for formula in formulas:
@@ -77,6 +75,7 @@ def pack(evidence):
             value['formula_ids']=ids
         result['visuals'].append(value)
     if formula_pool:result['formula_candidates']=formula_pool
+    if line_pool:result['ocr_lines']=line_pool
     for key in ('context_before', 'context_after'):
         result[key] = [{'text': text} for item in evidence.get(key, [])
                        if (text := clean_text(item['text']))]

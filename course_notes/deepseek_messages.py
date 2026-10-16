@@ -43,8 +43,13 @@ def call_messages(settings, provider, prompt, images=(), cancel=None, history=()
     from .llm import endpoint
     message=user_message(provider,prompt,images)
     if cancel:check_cancel(cancel)
+    effort=settings.deepseek_reasoning_effort
+    # Official effort mapping: medium -> high; the native tiers are low/high/max.
+    mapped={'off':'off','low':'low','medium':'high','high':'high','max':'max'}.get(effort)
+    if mapped is None:raise ValueError('未知 DeepSeek 思考强度。')
     body={'model':provider.model,'max_tokens':settings.llm_max_output_tokens,'stream':True,
-          'thinking':{'type':'disabled'},'messages':[*history,message]}
+          'thinking':{'type':'disabled' if mapped=='off' else 'enabled'},'messages':[*history,message]}
+    if mapped!='off':body['output_config']={'effort':mapped}
     response=requests.post(endpoint(provider.base_url,'messages'),
         headers={'x-api-key':provider.key,'anthropic-version':'2023-06-01'},json=body,
         stream=True,allow_redirects=False,timeout=(30,120))

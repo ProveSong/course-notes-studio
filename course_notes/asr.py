@@ -49,8 +49,11 @@ def transcribe(video: Path, job: Path, settings, cancel, notify):
     # Match the installed VideoCaptioner adapter's supported flags. Pass the
     # existing model folder directly, so the binary cannot select another model.
     command = [exe, '-m', settings.whisper_model, '--model_dir', model_dir, wav, '-l',settings.language,
-               '-d',settings.device, '--output_format','srt', '-o',job,
+               '-d',settings.device, '--compute_type','int8_float16','--batch_size','1', '--output_format','srt', '-o',job,
                '--vad_filter','true','--vad_threshold','0.40', '--one_word','0',
+               '--condition_on_previous_text','false','--temperature','0',
+               '--temperature_increment_on_fallback','None',
+               '--word_timestamps','true','--hallucination_silence_threshold','3',
                '--sentence','--max_line_width','30','--max_line_count','1',
                '--max_comma','20','--max_comma_cent','50', '--beep_off']
     warning=None
@@ -72,5 +75,8 @@ def transcribe(video: Path, job: Path, settings, cancel, notify):
     if not srt.is_file():
         raise RuntimeError('Whisper 未生成 audio.srt，请检查 asr.log')
     segments=parse_srt(srt.read_text('utf-8-sig'))
-    (job/'asr-outcome.json').write_text(json.dumps({'segments':len(segments),'warning':warning},ensure_ascii=False,indent=2),'utf-8')
+    (job/'asr-outcome.json').write_text(json.dumps({'segments':len(segments),'warning':warning,
+        'model':settings.whisper_model,'device':settings.device,'compute_type':'int8_float16',
+        'condition_on_previous_text':False,'temperature_fallback':False,
+        'hallucination_silence_threshold':3},ensure_ascii=False,indent=2),'utf-8')
     return segments

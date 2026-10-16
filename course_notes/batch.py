@@ -37,4 +37,9 @@ def run_batch(videos,output,settings,notify,cancel,auto_approve_images=False,on_
             notify('批量队列',f'{video.name} 失败，继续下一个视频：{error}')
         report.append(row)
         (Path(output)/'batch-results.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),'utf-8')
+    if settings.cleanup_cache_on_success and report and all(row['status']=='success' for row in report):
+        check_cancel(cancel)
+        from .cache_cleanup import cleanup_batch
+        removed=cleanup_batch(report,output)
+        notify('缓存清理',f'已清理 {len(removed)} 个临时音频，保留讲义、转录、截图与会话记录')
     return report

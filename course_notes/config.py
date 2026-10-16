@@ -25,13 +25,15 @@ class Settings:
     deepseek_base_url: str = 'https://api.deepseek.com'
     deepseek_model: str = 'deepseek-flash'
     deepseek_protocol: str = 'messages'
+    deepseek_reasoning_effort: str = 'off'
     vision_provider: str = ''
     vision_model: str = ''
     vision_transport: str = 'api'
     conversation_file: str = ''
     conversation_video: str = ''
     language: str = 'zh'
-    whisper_model: str = 'large-v2'
+    whisper_model: str = 'large-v3-turbo'
+    cleanup_cache_on_success: bool = False
     device: str = 'cuda'
     sample_seconds: float = 5.0
     max_gap_seconds: float = 30.0

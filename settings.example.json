@@ -5,7 +5,7 @@
   "llm_max_output_tokens": 10000,
   "llm_workers": 1,
   "ocr_mode": "printed",
-  "whisper_model": "large-v2",
+  "whisper_model": "large-v3-turbo",
   "device": "cuda",
   "deepseek_base_url": "https://api.deepseek.com",
   "deepseek_model": "deepseek-flash",

@@ -44,6 +44,8 @@ class App(tk.Tk):
         ttk.Button(queue_bar,text='清空队列',command=self.clear_videos).pack(side='left',padx=5)
         self.queue_list=tk.Listbox(self,height=3,selectmode='extended');self.queue_list.pack(fill='x',padx=14,pady=4)
         self.auto_images=tk.BooleanVar(value=False)
+        self.cleanup_cache=tk.BooleanVar(value=self.settings.cleanup_cache_on_success)
+        ttk.Checkbutton(self,text='全部任务成功后清理临时音频缓存（保留讲义、证据和会话）',variable=self.cleanup_cache).pack(anchor='w',padx=14)
         ttk.Checkbutton(self,text='本次运行自动同意全部视频任务的截图复核（发送到配置的视觉模型，不再逐张询问）',variable=self.auto_images).pack(anchor='w',padx=14)
         bar=ttk.Frame(self); bar.pack(fill='x',padx=14,pady=10); self.start=ttk.Button(bar,text='开始整理',command=self.start_job); self.start.pack(side='left'); ttk.Button(bar,text='取消',command=self.cancel.set).pack(side='left',padx=8)
         ttk.Button(bar,text='查看并批准截图复核',command=self.review_images).pack(side='left',padx=8)
@@ -114,6 +116,7 @@ class App(tk.Tk):
             selected_provider(settings)
             if self.auto_images.get():selected_provider(visual_settings(settings))
         except Exception as error:messagebox.showerror('配置错误',str(error));return
+        settings.cleanup_cache_on_success=self.cleanup_cache.get()
         settings.save();self.start.config(state='disabled');self.cancel.clear()
         self.job=Path(self.output.get())/(video.stem+'_job')
         import json
